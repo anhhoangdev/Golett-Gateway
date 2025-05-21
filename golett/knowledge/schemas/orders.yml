@@ -1,0 +1,119 @@
+cubes:
+  - name: Orders
+    sql_table: orders
+    description: "Sales orders information"
+    
+    joins:
+      - name: Customers
+        relationship: many_to_one
+        sql: "{CUBE}.customer_id = {Customers}.id"
+      
+      - name: Products
+        relationship: many_to_one
+        sql: "{CUBE}.product_id = {Products}.id"
+    
+    measures:
+      - name: count
+        type: count
+        description: "Number of orders"
+      
+      - name: total_amount
+        sql: amount
+        type: sum
+        format: currency
+        description: "Sum of order amounts"
+      
+      - name: average_order_value
+        sql: amount
+        type: avg
+        format: currency
+        description: "Average order value"
+        
+      - name: fulfilled_count
+        type: count
+        filters:
+          - sql: "{CUBE}.status = 'fulfilled'"
+        description: "Number of fulfilled orders"
+      
+      - name: pending_count
+        type: count
+        filters:
+          - sql: "{CUBE}.status = 'pending'"
+        description: "Number of pending orders"
+      
+      - name: fulfillment_rate
+        sql: CAST({fulfilled_count} AS DECIMAL) / NULLIF({count}, 0) * 100
+        type: number
+        format: percentage
+        description: "Order fulfillment rate"
+    
+    dimensions:
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+        description: "Unique order identifier"
+      
+      - name: status
+        sql: status
+        type: string
+        description: "Order status (pending, fulfilled, cancelled, etc.)"
+      
+      - name: payment_method
+        sql: payment_method
+        type: string
+        description: "Payment method used for the order"
+      
+      - name: created_at
+        sql: created_at
+        type: time
+        description: "Date and time when the order was created"
+      
+      - name: fulfilled_at
+        sql: fulfilled_at
+        type: time
+        description: "Date and time when the order was fulfilled"
+      
+      - name: delivery_method
+        sql: delivery_method
+        type: string
+        description: "Shipping or delivery method"
+        
+      - name: region
+        sql: region
+        type: string
+        description: "Geographic region of the order"
+    
+    segments:
+      - name: fulfilled
+        sql: "{CUBE}.status = 'fulfilled'"
+        description: "Orders that have been fulfilled"
+      
+      - name: pending
+        sql: "{CUBE}.status = 'pending'"
+        description: "Orders that are pending"
+      
+      - name: cancelled
+        sql: "{CUBE}.status = 'cancelled'"
+        description: "Orders that have been cancelled"
+    
+    pre_aggregations:
+      - name: daily_orders
+        measures:
+          - count
+          - total_amount
+          - average_order_value
+        dimensions:
+          - status
+          - payment_method
+        time_dimension: created_at
+        granularity: day
+      
+      - name: monthly_orders_by_region
+        measures:
+          - count
+          - total_amount
+        dimensions:
+          - region
+        time_dimension: created_at
+        granularity: month 
