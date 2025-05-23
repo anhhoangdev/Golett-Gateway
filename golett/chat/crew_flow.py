@@ -68,13 +68,19 @@ class CrewChatFlowManager(ChatFlowManager):
             bi_analyst = self._create_agent(
                 name="BI Analyst",
                 role="Business Intelligence Analyst",
-                goal="Extract insights from BI data and provide data-driven recommendations"
+                goal="Extract insights from BI data and provide data-driven recommendations",
+                backstory="""You are an experienced business intelligence analyst with expertise 
+                           in data analysis, reporting, and business insights. You excel at 
+                           interpreting complex data and translating it into actionable recommendations."""
             )
             
             data_scientist = self._create_agent(
                 name="Data Scientist",
                 role="Data Scientist",
-                goal="Analyze data patterns and provide statistical insights"
+                goal="Analyze data patterns and provide statistical insights",
+                backstory="""You are a skilled data scientist with deep knowledge of statistical 
+                           analysis, machine learning, and data visualization. You can identify 
+                           patterns and trends that others might miss."""
             )
             
             self.session.create_crew(
@@ -89,13 +95,19 @@ class CrewChatFlowManager(ChatFlowManager):
             knowledge_expert = self._create_agent(
                 name="Knowledge Expert",
                 role="Domain Knowledge Expert",
-                goal="Retrieve and analyze relevant domain knowledge"
+                goal="Retrieve and analyze relevant domain knowledge",
+                backstory="""You are a domain knowledge expert with extensive experience in 
+                           information retrieval and knowledge management. You excel at finding 
+                           relevant information and connecting concepts across different domains."""
             )
             
             context_analyst = self._create_agent(
                 name="Context Analyst",
                 role="Conversation Context Specialist",
-                goal="Analyze conversation history and provide contextual understanding"
+                goal="Analyze conversation history and provide contextual understanding",
+                backstory="""You are a conversation analysis specialist who understands the nuances 
+                           of human communication. You excel at maintaining context across long 
+                           conversations and identifying implicit meanings."""
             )
             
             self.session.create_crew(
@@ -110,13 +122,19 @@ class CrewChatFlowManager(ChatFlowManager):
             summarizer = self._create_agent(
                 name="Conversation Summarizer",
                 role="Conversation Summarization Specialist",
-                goal="Create concise, informative summaries of conversations"
+                goal="Create concise, informative summaries of conversations",
+                backstory="""You are an expert in conversation analysis and summarization. You can 
+                           distill long conversations into their essential points while preserving 
+                           important context and nuances."""
             )
             
             topic_extractor = self._create_agent(
                 name="Topic Extractor",
                 role="Topic Identification Specialist",
-                goal="Identify and categorize topics discussed in conversations"
+                goal="Identify and categorize topics discussed in conversations",
+                backstory="""You are a specialist in topic modeling and content categorization. You 
+                           excel at identifying themes, subjects, and key topics from conversational 
+                           data and organizing them in meaningful ways."""
             )
             
             self.session.create_crew(
@@ -175,30 +193,25 @@ class CrewChatFlowManager(ChatFlowManager):
     
     def _analyze_complexity(self, message: str) -> Tuple[bool, str]:
         """
-        Analyze if a message requires complex processing with a crew.
+        Analyze if a message requires complex crew processing.
         
         Args:
             message: The user's message
             
         Returns:
-            A tuple of (is_complex, reasoning)
+            Tuple of (is_complex, reasoning)
         """
-        # Get conversation history for context
-        history = self.session.get_message_history()
-        history_text = self._format_history(history)
+        # Create a simple analysis task
+        from crewai import Task, Crew
         
-        # Create a task for the complexity analyzer
         task = Task(
             description=f"""
-            Analyze if the user query is complex and requires specialized knowledge or multi-step reasoning.
+            Analyze this user message and determine if it requires complex processing:
             
-            User query: "{message}"
+            MESSAGE: "{message}"
             
-            Conversation history:
-            {history_text}
-            
-            Determine if this query:
-            1. Requires multi-step reasoning or analysis
+            Consider if the message:
+            1. Asks for data analysis or business intelligence
             2. Needs specialized domain knowledge
             3. Would benefit from multiple experts collaborating
             4. Involves complex data analysis or comparison
@@ -209,12 +222,28 @@ class CrewChatFlowManager(ChatFlowManager):
             expected_output="A decision (YES/NO) followed by reasoning"
         )
         
-        # Execute the task
-        result = task.execute()
+        # Create a temporary crew with the task
+        temp_crew = Crew(
+            agents=[self.query_analyzer],
+            tasks=[task],
+            verbose=False
+        )
+        
+        # Execute the task using the crew
+        try:
+            result = temp_crew.kickoff()
+            result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
+        except Exception as e:
+            logger.warning(f"Complexity analysis failed: {e}")
+            # Fallback to simple heuristic
+            complex_keywords = ["analyze", "compare", "report", "data", "metrics", "dashboard", "trend"]
+            is_complex = any(keyword in message.lower() for keyword in complex_keywords)
+            reasoning = f"Fallback analysis: {'Complex' if is_complex else 'Simple'} based on keywords"
+            return is_complex, reasoning
         
         # Parse the result
-        is_complex = "yes" in result.lower().split("\n")[0].lower()
-        reasoning = "\n".join(result.split("\n")[1:]) if "\n" in result else "No specific reasoning provided."
+        is_complex = "yes" in result_text.lower().split("\n")[0].lower()
+        reasoning = "\n".join(result_text.split("\n")[1:]) if "\n" in result_text else "No specific reasoning provided."
         
         # Store in context manager
         self.session.context_manager.store_crew_context(
@@ -308,9 +337,9 @@ class CrewChatFlowManager(ChatFlowManager):
         
         # Get knowledge context if available
         if self.session.has_knowledge:
-            knowledge_results = self.session.knowledge_adapter.retrieve_for_query(
+            knowledge_results = self.session.knowledge_adapter.retrieve_knowledge(
                 query=message,
-                session_id=self.session.session_id
+                limit=5
             )
             context_items.extend(knowledge_results)
             
@@ -324,8 +353,8 @@ class CrewChatFlowManager(ChatFlowManager):
         # Get previous crew results that might be relevant
         crew_results = self.session.context_manager.retrieve_crew_context(
             session_id=self.session.session_id,
-            context_type="task_result",
-            query=message
+            crew_id=crew_id,
+            context_type="task_result"
         )
         context_items.extend(crew_results)
         

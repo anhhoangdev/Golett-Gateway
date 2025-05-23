@@ -1,19 +1,18 @@
-from typing import Any, Dict, List, Optional, Union
-import json
+from typing import Any, Dict, List, Optional
 from datetime import datetime
 
-from golett.memory.memory_manager import MemoryManager
+from golett.memory.memory_manager import MemoryManager, MemoryLayer
 from golett.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
 class ContextManager:
     """
-    Manages contextual information for conversational agents and crews.
+    Enhanced context manager with normalized memory layer support.
     
-    This class provides specialized methods for storing, retrieving, and
-    organizing different types of contextual information that agents
-    might need during conversations.
+    This manager provides high-level context operations that leverage
+    Golett's normalized three-layer memory architecture for optimal
+    storage and retrieval based on content type and importance.
     """
     
     def __init__(self, memory_manager: MemoryManager):
@@ -21,10 +20,10 @@ class ContextManager:
         Initialize the context manager.
         
         Args:
-            memory_manager: The memory manager instance to use for storage
+            memory_manager: The memory manager instance
         """
         self.memory_manager = memory_manager
-        logger.info("Context Manager initialized")
+        logger.debug("Context manager initialized with normalized layer support")
     
     def store_knowledge_context(
         self,
@@ -33,10 +32,12 @@ class ContextManager:
         source: str,
         description: Optional[str] = None,
         tags: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        memory_layer: Optional[MemoryLayer] = None,
+        importance: Optional[float] = None
     ) -> str:
         """
-        Store knowledge-related contextual information.
+        Store knowledge-related contextual information in the appropriate memory layer.
         
         Args:
             session_id: The session ID
@@ -45,10 +46,16 @@ class ContextManager:
             description: Optional human-readable description
             tags: Optional tags for categorization
             metadata: Additional metadata
+            memory_layer: Explicit memory layer (auto-determined if None)
+            importance: Importance score (auto-determined if None)
             
         Returns:
             The context entry ID
         """
+        # Determine importance if not provided
+        if importance is None:
+            importance = 0.7  # Knowledge context is typically important
+        
         combined_metadata = {
             "source": source,
             "description": description or "Knowledge context",
@@ -63,8 +70,9 @@ class ContextManager:
             session_id=session_id,
             context_type="knowledge",
             data=content,
-            importance=0.7,  # Knowledge context is typically important
-            metadata=combined_metadata
+            importance=importance,
+            metadata=combined_metadata,
+            memory_layer=memory_layer
         )
     
     def store_crew_context(
@@ -74,10 +82,11 @@ class ContextManager:
         context_type: str,
         data: Any,
         importance: float = 0.6,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        memory_layer: Optional[MemoryLayer] = None
     ) -> str:
         """
-        Store crew-specific contextual information.
+        Store crew-specific contextual information in the appropriate memory layer.
         
         Args:
             session_id: The session ID
@@ -86,6 +95,7 @@ class ContextManager:
             data: The context data to store
             importance: Importance score (0.0-1.0)
             metadata: Additional metadata
+            memory_layer: Explicit memory layer (auto-determined if None)
             
         Returns:
             The context entry ID
@@ -104,7 +114,8 @@ class ContextManager:
             context_type="crew_context",
             data=data,
             importance=importance,
-            metadata=combined_metadata
+            metadata=combined_metadata,
+            memory_layer=memory_layer
         )
     
     def retrieve_knowledge_for_query(
@@ -113,10 +124,12 @@ class ContextManager:
         query: str,
         tags: Optional[List[str]] = None,
         sources: Optional[List[str]] = None,
-        limit: int = 5
+        limit: int = 5,
+        include_layers: Optional[List[MemoryLayer]] = None,
+        cross_session: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        Retrieve knowledge context relevant to a query.
+        Retrieve knowledge context relevant to a query across memory layers.
         
         Args:
             session_id: The session ID
@@ -124,15 +137,23 @@ class ContextManager:
             tags: Optional list of tags to filter by
             sources: Optional list of sources to filter by
             limit: Maximum number of results to return
+            include_layers: Memory layers to search (default: all layers)
+            cross_session: Whether to include cross-session results
             
         Returns:
             List of relevant knowledge context entries
         """
+        # Default to searching knowledge-relevant layers
+        if include_layers is None:
+            include_layers = [MemoryLayer.LONG_TERM, MemoryLayer.SHORT_TERM]
+        
         results = self.memory_manager.retrieve_context(
             session_id=session_id,
             query=query,
             context_types=["knowledge"],
-            limit=limit
+            limit=limit,
+            include_layers=include_layers,
+            cross_session=cross_session
         )
         
         # Apply additional filters
@@ -158,61 +179,166 @@ class ContextManager:
     def retrieve_crew_context(
         self,
         session_id: str,
-        crew_id: Optional[str] = None,
+        crew_id: str,
         context_type: Optional[str] = None,
-        query: Optional[str] = None,
-        limit: int = 5
+        limit: int = 10,
+        include_layers: Optional[List[MemoryLayer]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Retrieve crew-specific context.
+        Retrieve crew-specific context across memory layers.
         
         Args:
             session_id: The session ID
-            crew_id: Optional crew ID to filter by
+            crew_id: The crew ID to filter by
             context_type: Optional context subtype to filter by
-            query: Optional query for semantic search
             limit: Maximum number of results to return
+            include_layers: Memory layers to search (default: short-term and in-session)
             
         Returns:
-            List of relevant crew context entries
+            List of crew context entries
         """
-        if query:
-            # Use semantic search first
-            results = self.memory_manager.retrieve_context(
-                session_id=session_id,
-                query=query,
-                context_types=["crew_context"],
-                limit=limit
-            )
-        else:
-            # Use structured search
-            query = {"type": "context", "context_type": "crew_context"}
-            results = self.memory_manager.postgres.search(
-                query=query,
-                limit=limit,
-                session_id=session_id
-            )
+        # Default to crew-relevant layers
+        if include_layers is None:
+            include_layers = [MemoryLayer.SHORT_TERM, MemoryLayer.IN_SESSION]
         
-        # Apply additional filters
-        if crew_id or context_type:
-            filtered_results = []
-            for item in results:
-                metadata = item.get("metadata", {})
-                
-                # Filter by crew_id if specified
-                if crew_id and metadata.get("crew_id") != crew_id:
-                    continue
-                
-                # Filter by context_subtype if specified
-                if context_type and metadata.get("context_subtype") != context_type:
-                    continue
-                
-                filtered_results.append(item)
+        results = self.memory_manager.retrieve_context(
+            session_id=session_id,
+            query="",  # Empty query to get recent items
+            context_types=["crew_context"],
+            limit=limit,
+            include_layers=include_layers,
+            cross_session=False
+        )
+        
+        # Filter by crew_id and context_type
+        filtered_results = []
+        for item in results:
+            metadata = item.get("metadata", {})
             
-            return filtered_results
+            # Filter by crew_id
+            if metadata.get("crew_id") != crew_id:
+                continue
+            
+            # Filter by context_type if specified
+            if context_type and metadata.get("context_subtype") != context_type:
+                continue
+            
+            filtered_results.append(item)
         
-        return results
+        return filtered_results
     
+    def store_bi_context(
+        self,
+        session_id: str,
+        data_type: str,
+        data: Any,
+        description: str,
+        importance: float = 0.7,
+        metadata: Optional[Dict[str, Any]] = None,
+        memory_layer: Optional[MemoryLayer] = None
+    ) -> str:
+        """
+        Store BI-related context in the appropriate memory layer.
+        
+        Args:
+            session_id: The session ID
+            data_type: Type of BI data
+            data: The BI data to store
+            description: Human-readable description
+            importance: Importance score (0.0-1.0)
+            metadata: Additional metadata
+            memory_layer: Explicit memory layer (auto-determined if None)
+            
+        Returns:
+            The context entry ID
+        """
+        return self.memory_manager.store_bi_data(
+            session_id=session_id,
+            data_type=data_type,
+            data=data,
+            description=description,
+            importance=importance,
+            metadata=metadata,
+            memory_layer=memory_layer
+        )
+    
+    def retrieve_bi_context(
+        self,
+        session_id: str,
+        query: str,
+        data_types: Optional[List[str]] = None,
+        limit: int = 5,
+        include_layers: Optional[List[MemoryLayer]] = None,
+        cross_session: bool = True
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieve BI context across memory layers.
+        
+        Args:
+            session_id: The session ID
+            query: The search query
+            data_types: Optional list of BI data types to filter by
+            limit: Maximum number of results to return
+            include_layers: Memory layers to search (default: long-term and short-term)
+            cross_session: Whether to include cross-session results
+            
+        Returns:
+            List of relevant BI context entries
+        """
+        return self.memory_manager.retrieve_bi_data(
+            session_id=session_id,
+            query=query,
+            data_types=data_types,
+            limit=limit,
+            include_layers=include_layers,
+            cross_session=cross_session
+        )
+    
+    def get_layer_context_summary(
+        self,
+        session_id: str,
+        layer: MemoryLayer,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Get a summary of context stored in a specific memory layer.
+        
+        Args:
+            session_id: The session ID
+            layer: The memory layer to summarize
+            limit: Maximum number of items to include in summary
+            
+        Returns:
+            Summary of layer context
+        """
+        # Get context from the specific layer
+        results = self.memory_manager.retrieve_context(
+            session_id=session_id,
+            query="",  # Empty query to get recent items
+            limit=limit,
+            include_layers=[layer],
+            cross_session=(layer == MemoryLayer.LONG_TERM)
+        )
+        
+        # Analyze context types and create summary
+        context_types = {}
+        total_items = len(results)
+        
+        for item in results:
+            context_type = item.get("metadata", {}).get("context_type", "unknown")
+            if context_type not in context_types:
+                context_types[context_type] = 0
+            context_types[context_type] += 1
+        
+        return {
+            "layer": layer.value,
+            "total_items": total_items,
+            "context_types": context_types,
+            "sample_items": results[:5],  # First 5 items as samples
+            "layer_config": self.memory_manager.layer_configs.get(layer, {}),
+            "generated_at": datetime.now().isoformat()
+        }
+
     def store_conversation_summary(
         self,
         session_id: str,
@@ -220,33 +346,30 @@ class ContextManager:
         start_time: str,
         end_time: str,
         topics: List[str],
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        memory_layer: Optional[MemoryLayer] = None
     ) -> str:
         """
-        Store a summary of part of a conversation.
+        Store a conversation summary in the appropriate memory layer.
         
         Args:
             session_id: The session ID
-            summary: The conversation summary
-            start_time: Timestamp for the start of the summarized period
-            end_time: Timestamp for the end of the summarized period
-            topics: List of topics discussed in this summary
+            summary: The conversation summary text
+            start_time: Start time of the conversation segment
+            end_time: End time of the conversation segment
+            topics: List of topics covered in the summary
             metadata: Additional metadata
+            memory_layer: Explicit memory layer (auto-determined if None)
             
         Returns:
             The context entry ID
         """
-        summary_data = {
-            "summary": summary,
-            "start_time": start_time,
-            "end_time": end_time,
-            "topics": topics
-        }
-        
         combined_metadata = {
             "start_time": start_time,
             "end_time": end_time,
-            "topics": topics
+            "topics": topics,
+            "summary_type": "conversation",
+            "timestamp": datetime.now().isoformat()
         }
         
         if metadata:
@@ -255,53 +378,57 @@ class ContextManager:
         return self.memory_manager.store_context(
             session_id=session_id,
             context_type="conversation_summary",
-            data=summary_data,
-            importance=0.8,  # Summaries are important for context
-            metadata=combined_metadata
+            data=summary,
+            importance=0.6,  # Summaries are moderately important
+            metadata=combined_metadata,
+            memory_layer=memory_layer
         )
-    
+
     def retrieve_conversation_summaries(
         self,
         session_id: str,
-        topic: Optional[str] = None,
         query: Optional[str] = None,
-        limit: int = 3
+        topics: Optional[List[str]] = None,
+        limit: int = 5,
+        include_layers: Optional[List[MemoryLayer]] = None,
+        cross_session: bool = False
     ) -> List[Dict[str, Any]]:
         """
-        Retrieve conversation summaries.
+        Retrieve conversation summaries relevant to a query or topics.
         
         Args:
             session_id: The session ID
-            topic: Optional topic to filter by
-            query: Optional query for semantic search
-            limit: Maximum number of summaries to return
+            query: Optional search query
+            topics: Optional list of topics to filter by
+            limit: Maximum number of results to return
+            include_layers: Memory layers to search (default: short-term and long-term)
+            cross_session: Whether to include cross-session results
             
         Returns:
-            List of conversation summaries
+            List of relevant conversation summaries
         """
-        if query:
-            # Use semantic search if query provided
-            results = self.memory_manager.retrieve_context(
-                session_id=session_id,
-                query=query,
-                context_types=["conversation_summary"],
-                limit=limit
-            )
-        else:
-            # Use structured search
-            query = {"type": "context", "context_type": "conversation_summary"}
-            results = self.memory_manager.postgres.search(
-                query=query,
-                limit=limit,
-                session_id=session_id
-            )
+        # Default to summary-relevant layers
+        if include_layers is None:
+            include_layers = [MemoryLayer.SHORT_TERM, MemoryLayer.LONG_TERM]
         
-        # Filter by topic if specified
-        if topic:
+        results = self.memory_manager.retrieve_context(
+            session_id=session_id,
+            query=query or "",
+            context_types=["conversation_summary"],
+            limit=limit,
+            include_layers=include_layers,
+            cross_session=cross_session
+        )
+        
+        # Apply topic filters if specified
+        if topics:
             filtered_results = []
             for item in results:
-                topics = item.get("data", {}).get("topics", [])
-                if topic.lower() in [t.lower() for t in topics]:
+                metadata = item.get("metadata", {})
+                summary_topics = metadata.get("topics", [])
+                
+                # Check if any of the requested topics are in the summary topics
+                if any(topic in summary_topics for topic in topics):
                     filtered_results.append(item)
             
             return filtered_results

@@ -153,7 +153,7 @@ class ChatFlowManager:
     
     def _analyze_data_needs(self, message: str) -> Tuple[bool, str]:
         """
-        Analyze if the message requires BI data.
+        Analyze if a message requires BI data to answer effectively.
         
         Args:
             message: The user's message
@@ -166,6 +166,8 @@ class ChatFlowManager:
         history_text = self._format_history(history)
         
         # Create a task for the query analyzer
+        from crewai import Task, Crew
+        
         task = Task(
             description=f"""
             Analyze if the user query requires business intelligence data to answer effectively.
@@ -186,12 +188,28 @@ class ChatFlowManager:
             expected_output="A decision (YES/NO) followed by reasoning"
         )
         
-        # Execute the task
-        result = task.execute()
+        # Create a temporary crew with the task
+        temp_crew = Crew(
+            agents=[self.query_analyzer],
+            tasks=[task],
+            verbose=False
+        )
+        
+        # Execute the task using the crew
+        try:
+            result = temp_crew.kickoff()
+            result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
+        except Exception as e:
+            logger.warning(f"Data needs analysis failed: {e}")
+            # Fallback to simple heuristic
+            data_keywords = ["sales", "revenue", "metrics", "numbers", "data", "report", "analytics"]
+            should_use_data = any(keyword in message.lower() for keyword in data_keywords)
+            reasoning = f"Fallback analysis: {'Use data' if should_use_data else 'No data needed'} based on keywords"
+            return should_use_data, reasoning
         
         # Parse the result
-        should_use_data = "yes" in result.lower().split("\n")[0].lower()
-        reasoning = "\n".join(result.split("\n")[1:]) if "\n" in result else "No specific reasoning provided."
+        should_use_data = "yes" in result_text.lower().split("\n")[0].lower()
+        reasoning = "\n".join(result_text.split("\n")[1:]) if "\n" in result_text else "No specific reasoning provided."
         
         logger.info(f"Data needs analysis: Use data? {should_use_data}")
         return should_use_data, reasoning
@@ -216,6 +234,8 @@ class ChatFlowManager:
         history_text = self._format_history(history)
         
         # Create a task for the strategy agent
+        from crewai import Task, Crew
+        
         task = Task(
             description=f"""
             Determine the most effective response mode for the user query.
@@ -239,11 +259,24 @@ class ChatFlowManager:
             expected_output="A response mode and reasoning"
         )
         
-        # Execute the task
-        result = task.execute()
+        # Create a temporary crew with the task
+        temp_crew = Crew(
+            agents=[self.strategy_agent],
+            tasks=[task],
+            verbose=False
+        )
+        
+        # Execute the task using the crew
+        try:
+            result = temp_crew.kickoff()
+            result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
+        except Exception as e:
+            logger.warning(f"Response mode determination failed: {e}")
+            # Fallback to conversational mode
+            return "conversational", "Fallback to conversational mode due to analysis failure"
         
         # Parse the result
-        mode_line = result.split("\n")[0].upper()
+        mode_line = result_text.split("\n")[0].upper()
         for mode in ["ANALYTICAL", "NARRATIVE", "CONVERSATIONAL", "INSTRUCTIONAL"]:
             if mode in mode_line:
                 response_mode = mode.lower()
@@ -252,7 +285,7 @@ class ChatFlowManager:
             # Default if we couldn't parse
             response_mode = "conversational"
         
-        reasoning = "\n".join(result.split("\n")[1:]) if "\n" in result else "No specific reasoning provided."
+        reasoning = "\n".join(result_text.split("\n")[1:]) if "\n" in result_text else "No specific reasoning provided."
         
         logger.info(f"Response mode determination: {response_mode}")
         return response_mode, reasoning
@@ -293,6 +326,8 @@ class ChatFlowManager:
         decisions_text = self._format_decisions(decisions)
         
         # Create a task for the response agent
+        from crewai import Task, Crew
+        
         task = Task(
             description=f"""
             Generate a response to the user query based on the specified parameters.
@@ -318,11 +353,24 @@ class ChatFlowManager:
             expected_output="A complete response to the user query"
         )
         
-        # Execute the task
-        result = task.execute()
+        # Create a temporary crew with the task
+        temp_crew = Crew(
+            agents=[self.response_agent],
+            tasks=[task],
+            verbose=False
+        )
+        
+        # Execute the task using the crew
+        try:
+            result = temp_crew.kickoff()
+            result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
+        except Exception as e:
+            logger.warning(f"Response generation failed: {e}")
+            # Fallback to simple response
+            return f"I understand you're asking about: {message}. Let me help you with that based on the available information."
         
         logger.info(f"Generated response in {response_mode} mode")
-        return result
+        return result_text
     
     def _format_history(self, history: List[Dict[str, Any]]) -> str:
         """Format conversation history into a readable text."""

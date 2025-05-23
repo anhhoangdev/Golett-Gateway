@@ -234,8 +234,11 @@ class QdrantMemoryStorage(BaseMemoryStorage):
                     must=filter_conditions
                 )
             
-            # Set score threshold if provided
-            score_threshold = kwargs.get("score_threshold", 0.7)
+            # Set score threshold if provided (lowered default from 0.7 to 0.3)
+            score_threshold = kwargs.get("score_threshold", 0.3)
+            
+            logger.debug(f"Qdrant search: query='{query}', session_id={kwargs.get('session_id')}, "
+                        f"threshold={score_threshold}, limit={limit}")
             
             # Search in collection
             search_result = self.client.search(
@@ -247,6 +250,8 @@ class QdrantMemoryStorage(BaseMemoryStorage):
                 with_payload=True,
                 with_vectors=False
             )
+            
+            logger.debug(f"Qdrant search returned {len(search_result)} results")
             
             # Format results
             results = []

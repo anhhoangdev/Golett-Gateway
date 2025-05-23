@@ -185,6 +185,18 @@ class PostgresMemoryStorage(BaseMemoryStorage):
             logger.error(f"Error loading from memory storage: {e}")
             return None
 
+    def get(self, key: str) -> Optional[Dict[str, Any]]:
+        """
+        Alias for load method for compatibility.
+        
+        Args:
+            key: The identifier of the memory to retrieve
+            
+        Returns:
+            The memory entry if found, None otherwise
+        """
+        return self.load(key)
+
     def search(self, query: Any, limit: int = 5, **kwargs) -> List[Dict[str, Any]]:
         """
         Search for relevant memory entries.

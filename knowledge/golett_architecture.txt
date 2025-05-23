@@ -1,0 +1,51 @@
+# Golett Gateway Architecture
+
+Golett Gateway is a sophisticated conversational AI framework that combines the power of CrewAI with advanced memory management capabilities.
+
+## Core Components
+
+### Memory System
+The memory system is the foundation of Golett Gateway, providing persistent storage and intelligent retrieval:
+
+- **PostgreSQL Storage**: Handles structured data including conversation history, session metadata, user preferences, and decision tracking
+- **Qdrant Vector Database**: Manages vector embeddings for semantic search and similarity-based retrieval
+- **Dual Storage Architecture**: Combines the reliability of relational databases with the power of vector search
+
+### Knowledge Management
+Golett's knowledge system provides multiple layers of information access:
+
+- **File-based Sources**: Text files, PDFs, and structured documents
+- **Memory-based Sources**: Conversation context and learned information
+- **API Sources**: External data sources and real-time information
+- **Contextual Integration**: Automatic fusion of knowledge with conversation context
+
+### Agent Coordination
+CrewAI integration enables sophisticated multi-agent collaboration:
+
+- **Specialized Agents**: Query analyzers, response strategists, content generators
+- **Workflow Management**: Sequential and hierarchical task execution
+- **Context Sharing**: Agents share information through common memory
+- **Decision Tracking**: All agent decisions are logged and retrievable
+
+## Technical Benefits
+
+### Persistence
+Unlike traditional chatbots that lose context between sessions, Golett maintains:
+- Long-term conversation memory
+- User preference learning
+- Knowledge accumulation over time
+- Decision history and reasoning chains
+
+### Scalability
+The modular architecture supports:
+- Horizontal scaling of individual components
+- Independent service deployment
+- Load balancing across multiple instances
+- Efficient resource utilization
+
+### Intelligence
+Advanced AI capabilities include:
+- Multi-agent problem solving
+- Contextual knowledge retrieval
+- Adaptive response generation
+- Business intelligence integration

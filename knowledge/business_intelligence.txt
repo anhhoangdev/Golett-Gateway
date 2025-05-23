@@ -1,0 +1,52 @@
+# Business Intelligence Integration
+
+Golett Gateway provides sophisticated business intelligence capabilities through its integration with data analysis tools and specialized agents.
+
+## BI Agent Capabilities
+
+### Data Query Processing
+The BI agents can handle complex analytical queries:
+
+- **Natural Language Queries**: Convert business questions into data queries
+- **Multi-dimensional Analysis**: Analyze data across time, geography, products, customers
+- **Trend Analysis**: Identify patterns and trends in business metrics
+- **Comparative Analysis**: Compare performance across different dimensions
+
+### Supported Metrics
+Common business metrics that can be analyzed:
+
+- **Sales Performance**: Revenue, units sold, conversion rates
+- **Customer Analytics**: Acquisition cost, lifetime value, churn rates
+- **Operational Metrics**: Efficiency ratios, cost analysis, resource utilization
+- **Financial KPIs**: Profit margins, ROI, cash flow analysis
+
+### Data Sources
+Integration with various data sources:
+
+- **Cube.js Integration**: Direct connection to analytical data cubes
+- **Database Queries**: SQL-based data retrieval
+- **API Connections**: Real-time data from external services
+- **File-based Data**: CSV, Excel, and structured data files
+
+## Use Cases
+
+### Executive Dashboards
+Generate insights for leadership:
+- Performance summaries
+- Trend analysis
+- Competitive positioning
+- Strategic recommendations
+
+### Operational Analytics
+Support day-to-day operations:
+- Sales performance tracking
+- Customer service metrics
+- Inventory management
+- Process optimization
+
+### Predictive Analytics
+Forward-looking insights:
+- Demand forecasting
+- Risk assessment
+- Opportunity identification
+- Resource planning

@@ -1,4 +1,5 @@
 from typing import Any, Dict, List, Optional, Union
+from datetime import datetime
 
 from crewai import Crew, Agent, Task
 from crewai.agent import Agent as CrewAgent
@@ -152,9 +153,29 @@ class CrewChatSession(ChatSession):
         
         crew = self.crews[crew_id]
         
-        # Prepare inputs with task description
-        task_inputs = inputs or {}
-        task_inputs["task"] = task_description
+        # Create a task for the crew to execute
+        from crewai import Task
+        
+        # Use the first agent in the crew as the task agent
+        if not crew.agents:
+            raise ValueError(f"Crew '{crew_id}' has no agents")
+        
+        task_agent = crew.agents[0]  # Use first agent for the task
+        
+        task = Task(
+            description=task_description,
+            agent=task_agent,
+            expected_output="A complete response to the task"
+        )
+        
+        # Create a new crew with the task
+        from crewai import Crew
+        task_crew = Crew(
+            agents=crew.agents,
+            tasks=[task],
+            verbose=crew.verbose,
+            process=crew.process
+        )
         
         logger.info(f"Executing task with crew '{crew_id}': {task_description[:50]}...")
         
@@ -177,14 +198,56 @@ class CrewChatSession(ChatSession):
         )
         
         # Execute the crew task
-        result = crew.kickoff(inputs=task_inputs)
+        result = task_crew.kickoff(inputs=inputs)
+        
+        # Extract the result text and create a serializable result object
+        result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
+        
+        # Safely extract usage metrics if available
+        usage_info = {}
+        if hasattr(result, 'token_usage') and result.token_usage:
+            try:
+                # Try to extract basic usage info safely
+                usage_obj = result.token_usage
+                if hasattr(usage_obj, 'total_tokens'):
+                    usage_info['total_tokens'] = getattr(usage_obj, 'total_tokens', 0)
+                if hasattr(usage_obj, 'prompt_tokens'):
+                    usage_info['prompt_tokens'] = getattr(usage_obj, 'prompt_tokens', 0)
+                if hasattr(usage_obj, 'completion_tokens'):
+                    usage_info['completion_tokens'] = getattr(usage_obj, 'completion_tokens', 0)
+                if hasattr(usage_obj, 'total_cost'):
+                    usage_info['total_cost'] = getattr(usage_obj, 'total_cost', 0.0)
+            except Exception:
+                # If we can't extract usage info, just skip it
+                usage_info = {"note": "Usage metrics not available"}
+        
+        # Create a serializable result dictionary
+        serializable_result = {
+            "result": result_text,
+            "task_description": task_description,
+            "crew_id": crew_id,
+            "agent_count": len(crew.agents),
+            "usage_metrics": usage_info,
+            "execution_timestamp": datetime.now().isoformat()
+        }
+        
+        # Add execution time if available
+        if hasattr(result, 'execution_time'):
+            try:
+                exec_time = result.execution_time
+                if isinstance(exec_time, (int, float)):
+                    serializable_result["execution_time"] = exec_time
+                else:
+                    serializable_result["execution_time"] = str(exec_time)
+            except Exception:
+                pass
         
         # Store the result in context manager
         result_id = self.context_manager.store_crew_context(
             session_id=self.session_id,
             crew_id=crew_id,
             context_type="task_result",
-            data=result,
+            data=serializable_result,
             importance=0.8,  # Higher importance for crew results
             metadata={
                 "task_id": task_id,
@@ -196,7 +259,7 @@ class CrewChatSession(ChatSession):
         
         return {
             "crew_id": crew_id,
-            "result": result,
+            "result": result_text,
             "result_id": result_id
         }
     

@@ -1,0 +1,104 @@
+Golett Gateway Technical Implementation Details
+
+Memory Management System:
+
+The memory system in Golett Gateway uses a dual-storage approach to handle both structured and unstructured data efficiently:
+
+1. PostgreSQL Storage:
+   - Stores structured conversation data, session metadata, and user information
+   - Handles relational data with ACID compliance
+   - Supports complex queries for session management and analytics
+   - Includes tables for sessions, messages, context, and decision tracking
+
+2. Qdrant Vector Storage:
+   - Stores vector embeddings of conversation content for semantic search
+   - Enables similarity-based retrieval of relevant historical information
+   - Supports high-dimensional vector operations with efficient indexing
+   - Provides real-time vector search capabilities
+
+Session Management:
+
+Sessions in Golett Gateway are persistent entities that maintain conversation state across multiple interactions:
+
+- Each session has a unique identifier and associated metadata
+- Sessions can be active or inactive, with automatic timeout handling
+- Context is preserved across session boundaries
+- Session history is searchable and retrievable
+
+CrewAI Integration:
+
+Golett Gateway leverages CrewAI for multi-agent collaboration:
+
+1. Agent Roles:
+   - Query Analyzer: Interprets user intent and extracts key information
+   - Response Strategist: Determines the best approach for responding
+   - Content Generator: Creates the actual response content
+   - Context Manager: Manages conversation context and memory
+
+2. Agent Coordination:
+   - Agents work together in a coordinated workflow
+   - Information is shared between agents through a common context
+   - Decision-making is distributed across specialized agents
+   - Results are aggregated into coherent responses
+
+Knowledge Sources:
+
+The knowledge system supports multiple types of sources:
+
+- Text files (.txt, .md)
+- PDF documents
+- Structured data files (JSON, YAML)
+- Web-based sources (URLs)
+- Database queries
+
+Knowledge Integration Process:
+
+1. Source Discovery: Automatically detects available knowledge sources
+2. Content Extraction: Extracts text content from various file formats
+3. Embedding Generation: Creates vector embeddings for semantic search
+4. Index Creation: Builds searchable indexes for efficient retrieval
+5. Context Fusion: Combines knowledge with conversation context
+
+API Architecture:
+
+The FastAPI-based REST API provides:
+
+- Session management endpoints
+- Chat interaction endpoints
+- Health monitoring endpoints
+- Administrative endpoints
+- WebSocket support for real-time communication
+
+Deployment Architecture:
+
+Golett Gateway is designed for containerized deployment:
+
+- Docker Compose for multi-service orchestration
+- Separate containers for each service component
+- Health checks and automatic restart capabilities
+- Volume mounting for persistent data storage
+- Environment-based configuration management
+
+Performance Considerations:
+
+- Asynchronous processing for non-blocking operations
+- Connection pooling for database efficiency
+- Caching strategies for frequently accessed data
+- Batch processing for bulk operations
+- Monitoring and logging for performance tracking
+
+Security Features:
+
+- Environment-based secret management
+- Database connection encryption
+- API authentication and authorization
+- Input validation and sanitization
+- Audit logging for security events
+
+Scalability Design:
+
+- Horizontal scaling support for stateless components
+- Database sharding capabilities for large datasets
+- Load balancing for high-availability deployments
+- Microservices architecture for independent scaling
+- Event-driven communication between components 

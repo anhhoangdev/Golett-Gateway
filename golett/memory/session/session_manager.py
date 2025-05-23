@@ -3,7 +3,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 
-from golett.memory.memory_manager import MemoryManager
+from golett.memory.memory_manager import MemoryManager, MemoryLayer
 from golett.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -41,11 +41,19 @@ class SessionManager:
             user_id: Identifier for the user
             session_type: Type of session (e.g., "standard", "crew", "bi")
             preferences: Optional user preferences for this session
-            metadata: Additional metadata
+            metadata: Additional metadata (can include 'session_id' for custom ID)
             
         Returns:
             The session ID
         """
+        # Extract custom session ID if provided in metadata
+        custom_session_id = None
+        if metadata and 'session_id' in metadata:
+            custom_session_id = metadata['session_id']
+            # Remove session_id from metadata to avoid duplication
+            metadata = metadata.copy()
+            del metadata['session_id']
+        
         # Prepare metadata
         combined_metadata = {
             "user_id": user_id,
@@ -57,8 +65,11 @@ class SessionManager:
         if metadata:
             combined_metadata.update(metadata)
         
-        # Create session in memory manager
-        session_id = self.memory_manager.create_session(combined_metadata)
+        # Create session in memory manager with custom ID if provided
+        session_id = self.memory_manager.create_session(
+            metadata=combined_metadata,
+            session_id=custom_session_id
+        )
         
         # Store initial session state
         self.update_session_state(
@@ -84,21 +95,29 @@ class SessionManager:
         Returns:
             Session metadata and state
         """
-        # Get session metadata
-        session_key = f"session:{session_id}"
-        session_data = self.memory_manager.postgres.get(
-            key=session_key
-        )
+        # Get session metadata using layer-aware key format
+        # Sessions are stored in short-term layer with format: st:{session_id}:session
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            session_key = f"st:{session_id}:session"
+            postgres_storage = self.memory_manager.layer_storage[MemoryLayer.SHORT_TERM]["postgres"]
+        else:
+            # Backward compatibility
+            session_key = f"session:{session_id}"
+            postgres_storage = self.memory_manager.postgres
+        
+        session_data = postgres_storage.get(key=session_key)
         
         if not session_data:
             logger.warning(f"Session {session_id} not found")
             return {}
         
-        # Get session state
-        state_key = f"session_state:{session_id}"
-        state_data = self.memory_manager.postgres.get(
-            key=state_key
-        )
+        # Get session state using layer-aware key format
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            state_key = f"st:{session_id}:session_state"
+        else:
+            state_key = f"session_state:{session_id}"
+            
+        state_data = postgres_storage.get(key=state_key)
         
         # Combine data
         result = {
@@ -122,11 +141,15 @@ class SessionManager:
             session_id: The session ID
             state: The new state data (will be merged with existing state)
         """
-        # Get current state
-        state_key = f"session_state:{session_id}"
-        current_state = self.memory_manager.postgres.get(
-            key=state_key
-        )
+        # Get current state using layer-aware key format
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            state_key = f"st:{session_id}:session_state"
+            postgres_storage = self.memory_manager.layer_storage[MemoryLayer.SHORT_TERM]["postgres"]
+        else:
+            state_key = f"session_state:{session_id}"
+            postgres_storage = self.memory_manager.postgres
+            
+        current_state = postgres_storage.get(key=state_key)
         
         # Prepare new state (merge with existing)
         if current_state and "data" in current_state:
@@ -139,7 +162,7 @@ class SessionManager:
         new_state["last_activity"] = datetime.now().isoformat()
         
         # Save updated state
-        self.memory_manager.postgres.save(
+        postgres_storage.save(
             key=state_key,
             data=new_state,
             metadata={
@@ -170,11 +193,15 @@ class SessionManager:
             process_type: Process type (e.g., "sequential", "hierarchical")
             metadata: Additional metadata
         """
-        # Get current state
-        state_key = f"session_state:{session_id}"
-        current_state = self.memory_manager.postgres.get(
-            key=state_key
-        )
+        # Get current state using layer-aware key format
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            state_key = f"st:{session_id}:session_state"
+            postgres_storage = self.memory_manager.layer_storage[MemoryLayer.SHORT_TERM]["postgres"]
+        else:
+            state_key = f"session_state:{session_id}"
+            postgres_storage = self.memory_manager.postgres
+            
+        current_state = postgres_storage.get(key=state_key)
         
         if not current_state:
             logger.warning(f"Session {session_id} not found")
@@ -215,18 +242,22 @@ class SessionManager:
         increment: int = 1
     ) -> None:
         """
-        Update the task count for a crew.
+        Update the task count for a crew in a session.
         
         Args:
             session_id: The session ID
             crew_id: The crew ID
             increment: Amount to increment the task count by
         """
-        # Get current state
-        state_key = f"session_state:{session_id}"
-        current_state = self.memory_manager.postgres.get(
-            key=state_key
-        )
+        # Get current state using layer-aware key format
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            state_key = f"st:{session_id}:session_state"
+            postgres_storage = self.memory_manager.layer_storage[MemoryLayer.SHORT_TERM]["postgres"]
+        else:
+            state_key = f"session_state:{session_id}"
+            postgres_storage = self.memory_manager.postgres
+            
+        current_state = postgres_storage.get(key=state_key)
         
         if not current_state or "data" not in current_state:
             logger.warning(f"Session {session_id} not found")
@@ -273,8 +304,13 @@ class SessionManager:
         if user_id:
             query["user_id"] = user_id
         
-        # Get all matching sessions
-        sessions = self.memory_manager.postgres.search(
+        # Get all matching sessions using appropriate storage
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            postgres_storage = self.memory_manager.layer_storage[MemoryLayer.SHORT_TERM]["postgres"]
+        else:
+            postgres_storage = self.memory_manager.postgres
+            
+        sessions = postgres_storage.search(
             query=query,
             limit=100  # Reasonable limit
         )
@@ -289,11 +325,13 @@ class SessionManager:
             if not session_id:
                 continue
                 
-            # Get session state to check activity
-            state_key = f"session_state:{session_id}"
-            state = self.memory_manager.postgres.get(
-                key=state_key
-            )
+            # Get session state to check activity using layer-aware key format
+            if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+                state_key = f"st:{session_id}:session_state"
+            else:
+                state_key = f"session_state:{session_id}"
+                
+            state = postgres_storage.get(key=state_key)
             
             if not state:
                 continue
@@ -329,9 +367,15 @@ class SessionManager:
             }
         )
         
-        # Update session data
-        session_key = f"session:{session_id}"
-        self.memory_manager.postgres.save(
+        # Update session data using layer-aware key format
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            session_key = f"st:{session_id}:session"
+            postgres_storage = self.memory_manager.layer_storage[MemoryLayer.SHORT_TERM]["postgres"]
+        else:
+            session_key = f"session:{session_id}"
+            postgres_storage = self.memory_manager.postgres
+            
+        postgres_storage.save(
             key=session_key,
             data={"status": "closed", "closed_at": datetime.now().isoformat()},
             metadata={
@@ -355,11 +399,16 @@ class SessionManager:
             session_id: The session ID
             preferences: User preferences
         """
-        # Get current session data
-        session_key = f"session:{session_id}"
-        session_data = self.memory_manager.postgres.get(
-            key=session_key
-        )
+        # Get current session data using layer-aware key format
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            session_key = f"st:{session_id}:session"
+            postgres_storage = self.memory_manager.layer_storage[MemoryLayer.SHORT_TERM]["postgres"]
+        else:
+            # Backward compatibility
+            session_key = f"session:{session_id}"
+            postgres_storage = self.memory_manager.postgres
+        
+        session_data = postgres_storage.get(key=session_key)
         
         if not session_data:
             logger.warning(f"Session {session_id} not found")
@@ -376,7 +425,7 @@ class SessionManager:
         metadata["preferences"] = updated_prefs
         
         # Save updated session metadata
-        self.memory_manager.postgres.save(
+        postgres_storage.save(
             key=session_key,
             data=session_data.get("data", {}),
             metadata=metadata
@@ -397,11 +446,16 @@ class SessionManager:
         Returns:
             User preferences
         """
-        # Get session data
-        session_key = f"session:{session_id}"
-        session_data = self.memory_manager.postgres.get(
-            key=session_key
-        )
+        # Get session data using layer-aware key format
+        if hasattr(self.memory_manager, 'enable_normalized_layers') and self.memory_manager.enable_normalized_layers:
+            session_key = f"st:{session_id}:session"
+            postgres_storage = self.memory_manager.layer_storage[MemoryLayer.SHORT_TERM]["postgres"]
+        else:
+            # Backward compatibility
+            session_key = f"session:{session_id}"
+            postgres_storage = self.memory_manager.postgres
+        
+        session_data = postgres_storage.get(key=session_key)
         
         if not session_data:
             logger.warning(f"Session {session_id} not found")

@@ -1,0 +1,53 @@
+# Golett Gateway Overview
+
+Golett Gateway is a sophisticated, modular framework for building long-term conversational agents inspired by CrewAI. It provides a comprehensive solution for creating intelligent chatbots with persistent memory, multi-agent collaboration, and business intelligence capabilities.
+
+## Key Features
+- Persistent Memory System
+  - Dual storage architecture using PostgreSQL for structured data and Qdrant for vector embeddings
+  - Session-based conversation tracking across multiple interactions
+  - Contextual memory management with automatic relevance scoring
+  - Semantic search capabilities for retrieving relevant historical information
+- CrewAI Integration
+  - Multi-agent collaboration framework
+  - Specialized agent roles for different tasks
+  - Coordinated decision-making processes
+  - Knowledge sharing between agents
+- Business Intelligence Capabilities
+  - Query analysis and interpretation
+  - Data-driven response generation
+  - Integration with business data sources
+  - Analytical insights and recommendations
+- Modular Architecture
+  - Pluggable components for easy customization
+  - Scalable design for enterprise deployment
+  - RESTful API for integration with existing systems
+  - Docker-based deployment for consistency
+- Knowledge Management
+  - File-based knowledge sources
+  - Automatic knowledge indexing and retrieval
+  - Context-aware information fusion
+  - Dynamic knowledge updates
+
+## Architecture
+The system consists of multiple layers:
+1. Memory Layer: Handles data persistence and retrieval
+2. Chat Layer: Manages conversation flow and session state
+3. Agent Layer: Coordinates CrewAI agents for specialized tasks
+4. Knowledge Layer: Integrates external knowledge sources
+
+## Technical Components
+- Memory Layer: PostgreSQL + Qdrant for hybrid storage
+- Agent Layer: CrewAI-powered multi-agent system
+- Chat Layer: Session management and flow control
+- Knowledge Layer: File-based sources with semantic retrieval
+- API Layer: FastAPI-based REST endpoints
+
+## Use Cases
+- Customer support automation
+- Business intelligence assistants
+- Knowledge management systems
+- Educational chatbots
+- Personal productivity assistants
+
+Golett Gateway is designed for organizations that need sophisticated conversational AI with long-term memory, multi-agent capabilities, and seamless integration with existing business systems.

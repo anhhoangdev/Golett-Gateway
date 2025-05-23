@@ -1,0 +1,23 @@
+# Business Intelligence Context
+
+## Sales Data
+Our company tracks sales across multiple regions and product categories.
+Key metrics include:
+- Monthly revenue
+- Customer acquisition cost
+- Product performance
+- Regional sales distribution
+
+## Customer Data
+We maintain comprehensive customer profiles including:
+- Demographics
+- Purchase history
+- Engagement metrics
+- Support interactions
+
+## Operational Metrics
+Important operational KPIs:
+- System uptime
+- Response times
+- Error rates
+- User satisfaction scores
