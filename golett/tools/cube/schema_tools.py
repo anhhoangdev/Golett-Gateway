@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 from pathlib import Path
 
 from crewai.tools import BaseTool
+from pydantic import Field
 from golett.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -15,15 +16,23 @@ class LoadCubeSchemasTool(BaseTool):
     name: str = "LoadCubeSchemas"
     description: str = "Load Cube.js schema definitions from YAML files to understand data models"
     
-    def __init__(self, schemas_path: Optional[str] = None):
+    # Declare Pydantic fields
+    schemas_path: str = Field(default="schemas", description="Directory path containing Cube.js schema files")
+    
+    def __init__(self, schemas_path: Optional[str] = None, **kwargs):
         """
         Initialize the tool with a path to schema files.
         
         Args:
             schemas_path: Directory path containing Cube.js schema files
         """
-        super().__init__()
-        self.schemas_path = schemas_path or os.environ.get("CUBEJS_SCHEMAS_PATH", "schemas")
+        # Set the schemas_path before calling super().__init__()
+        if schemas_path is not None:
+            kwargs['schemas_path'] = schemas_path
+        elif 'schemas_path' not in kwargs:
+            kwargs['schemas_path'] = os.environ.get("CUBEJS_SCHEMAS_PATH", "schemas")
+            
+        super().__init__(**kwargs)
         logger.info(f"Initialized LoadCubeSchemas tool with path: {self.schemas_path}")
 
     def _run(self, schema_name: Optional[str] = None) -> Dict[str, Any]:
@@ -36,6 +45,10 @@ class LoadCubeSchemasTool(BaseTool):
         Returns:
             Dictionary of loaded schema definitions
         """
+        # Handle string "None" values from CrewAI agents
+        if schema_name == "None":
+            schema_name = None
+            
         schemas_dir = Path(self.schemas_path)
         if not schemas_dir.exists():
             return {"error": f"Schemas directory not found: {self.schemas_path}"}
@@ -80,15 +93,23 @@ class SaveCubeSchemaTool(BaseTool):
     name: str = "SaveCubeSchema"
     description: str = "Save or update a Cube.js schema definition to a YAML file"
     
-    def __init__(self, schemas_path: Optional[str] = None):
+    # Declare Pydantic fields
+    schemas_path: str = Field(default="schemas", description="Directory path to save Cube.js schema files")
+    
+    def __init__(self, schemas_path: Optional[str] = None, **kwargs):
         """
         Initialize the tool with a path to schema files.
         
         Args:
             schemas_path: Directory path to save Cube.js schema files
         """
-        super().__init__()
-        self.schemas_path = schemas_path or os.environ.get("CUBEJS_SCHEMAS_PATH", "schemas")
+        # Set the schemas_path before calling super().__init__()
+        if schemas_path is not None:
+            kwargs['schemas_path'] = schemas_path
+        elif 'schemas_path' not in kwargs:
+            kwargs['schemas_path'] = os.environ.get("CUBEJS_SCHEMAS_PATH", "schemas")
+            
+        super().__init__(**kwargs)
         logger.info(f"Initialized SaveCubeSchema tool with path: {self.schemas_path}")
 
     def _run(self, schema_name: str, schema_definition: Dict[str, Any]) -> Dict[str, Any]:
@@ -132,16 +153,27 @@ class AnalyzeCubeSchemasTool(BaseTool):
     name: str = "AnalyzeCubeSchemas"
     description: str = "Analyze Cube.js schemas to understand data models, relationships, and metrics"
     
-    def __init__(self, schemas_path: Optional[str] = None):
+    # Declare Pydantic fields
+    schemas_path: str = Field(default="schemas", description="Directory path containing Cube.js schema files")
+    loader: LoadCubeSchemasTool = Field(default=None, description="Schema loader tool instance")
+    
+    def __init__(self, schemas_path: Optional[str] = None, **kwargs):
         """
         Initialize the tool.
         
         Args:
             schemas_path: Directory path containing Cube.js schema files
         """
-        super().__init__()
-        self.schemas_path = schemas_path or os.environ.get("CUBEJS_SCHEMAS_PATH", "schemas")
-        self.loader = LoadCubeSchemasTool(schemas_path)
+        # Set the schemas_path before calling super().__init__()
+        if schemas_path is not None:
+            kwargs['schemas_path'] = schemas_path
+        elif 'schemas_path' not in kwargs:
+            kwargs['schemas_path'] = os.environ.get("CUBEJS_SCHEMAS_PATH", "schemas")
+            
+        # Create the loader with the same path
+        kwargs['loader'] = LoadCubeSchemasTool(kwargs['schemas_path'])
+        
+        super().__init__(**kwargs)
         logger.info(f"Initialized AnalyzeCubeSchemas tool")
 
     def _run(self, schema_name: Optional[str] = None, analysis_type: str = "full") -> Dict[str, Any]:
@@ -155,6 +187,10 @@ class AnalyzeCubeSchemasTool(BaseTool):
         Returns:
             Analysis results
         """
+        # Handle string "None" values from CrewAI agents
+        if schema_name == "None":
+            schema_name = None
+            
         # Load schemas
         schemas = self.loader._run(schema_name)
         

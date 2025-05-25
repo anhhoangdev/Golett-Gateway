@@ -1,0 +1,147 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database - Single instance for both Golett and Farm Data
+  postgres:
+    image: postgres:15-alpine
+    container_name: golett_farm_postgres
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: golett_user
+      POSTGRES_PASSWORD: golett_password
+      POSTGRES_MULTIPLE_DATABASES: golett_db,farm_data
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-scripts:/docker-entrypoint-initdb.d
+      - ./create_database_schema.sql:/docker-entrypoint-initdb.d/02-farm-schema.sql
+      - ./docker/init-golett-schema.sql:/docker-entrypoint-initdb.d/01-golett-schema.sql
+    networks:
+      - golett_farm_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U golett_user -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Qdrant Vector Database for Golett
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: golett_qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - golett_farm_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # CubeJS Server for Farm Data Analytics
+  cubejs:
+    image: cubejs/cube:latest
+    container_name: farm_cubejs
+    environment:
+      CUBEJS_DB_TYPE: postgres
+      CUBEJS_DB_HOST: postgres
+      CUBEJS_DB_NAME: farm_data
+      CUBEJS_DB_USER: golett_user
+      CUBEJS_DB_PASS: golett_password
+      CUBEJS_DB_PORT: 5432
+      CUBEJS_WEB_SOCKETS: "true"
+      CUBEJS_DEV_MODE: "true"
+      CUBEJS_API_SECRET: farm_data_secret_key_change_in_production
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./cubejs-schema:/cube/conf/schema
+      - ./cubejs-config:/cube/conf
+    networks:
+      - golett_farm_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Golett Gateway Application
+  golett:
+    build:
+      context: ..
+      dockerfile: farm_data/docker/Dockerfile.golett
+    container_name: golett_gateway
+    environment:
+      # PostgreSQL Configuration (both databases)
+      POSTGRES_CONNECTION: postgresql://golett_user:golett_password@postgres:5432/golett_db
+      FARM_POSTGRES_CONNECTION: postgresql://golett_user:golett_password@postgres:5432/farm_data
+      
+      # Qdrant Configuration
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_API_KEY: ""
+      
+      # CubeJS Configuration
+      CUBEJS_API_URL: http://cubejs:4000/cubejs-api/v1
+      CUBEJS_API_TOKEN: farm_data_secret_key_change_in_production
+      CUBEJS_SCHEMAS_PATH: /app/cubejs-schema
+      
+      # LLM Configuration
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      LLM_MODEL: gpt-4o
+      LLM_PROVIDER: openai
+      
+      # Application Configuration
+      LOG_LEVEL: INFO
+      ENABLE_NORMALIZED_LAYERS: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./cubejs-schema:/app/cubejs-schema:ro
+      - ./processed_data:/app/farm_data:ro
+      - ../logs:/app/logs
+    networks:
+      - golett_farm_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      cubejs:
+        condition: service_started
+    restart: unless-stopped
+
+  # Farm Data Management Service
+  farm_data_manager:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.farm_data
+    container_name: farm_data_manager
+    environment:
+      POSTGRES_CONNECTION: postgresql://golett_user:golett_password@postgres:5432/farm_data
+      PYTHONPATH: /app
+    volumes:
+      - ./processed_data:/app/data:ro
+      - ./scripts:/app/scripts:ro
+      - ../logs:/app/logs
+    networks:
+      - golett_farm_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"  # Run once for data import
+    command: ["python", "import_data.py"]
+
+volumes:
+  postgres_data:
+    driver: local
+  qdrant_data:
+    driver: local
+
+networks:
+  golett_farm_network:
+    driver: bridge 

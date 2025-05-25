@@ -1,0 +1,137 @@
+cubes:
+  - name: sales_metrics
+    sql_table: public.sales_metrics
+    data_source: default
+
+    joins:
+      - name: daily_reports
+        sql: "{CUBE}.report_id = {daily_reports}.report_id"
+        relationship: many_to_one
+
+    dimensions:
+      - name: metric_id
+        sql: metric_id
+        type: number
+        primary_key: true
+
+      - name: sales_channel
+        sql: sales_channel
+        type: string
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+      - name: total_revenue
+        sql: total_revenue
+        type: sum
+
+      - name: total_orders
+        sql: total_orders
+        type: sum
+
+      - name: new_customers
+        sql: new_customers
+        type: sum
+
+      - name: customer_visits
+        sql: customer_visits
+        type: sum
+
+      - name: quotations_sent
+        sql: quotations_sent
+        type: sum
+
+      - name: contracts_signed
+        sql: contracts_signed
+        type: sum
+
+      - name: payment_received
+        sql: payment_received
+        type: sum
+
+      - name: outstanding_receivables
+        sql: outstanding_receivables
+        type: sum
+
+      - name: customer_complaints
+        sql: customer_complaints
+        type: sum
+
+      - name: market_share
+        sql: market_share
+        type: avg
+
+      - name: sales_target_achievement
+        sql: sales_target_achievement
+        type: avg
+
+      - name: average_order_value
+        sql: average_order_value
+        type: avg
+
+      - name: customer_retention_rate
+        sql: customer_retention_rate
+        type: avg
+
+    pre_aggregations:
+      - name: daily_sales_summary
+        measures:
+          - total_revenue
+          - total_orders
+          - new_customers
+          - payment_received
+          - outstanding_receivables
+        dimensions:
+          - sales_channel
+        time_dimension: daily_reports.report_date
+        granularity: day
+        refresh_key:
+          every: "30 minutes"
+          
+      - name: sales_channel_performance
+        measures:
+          - total_revenue
+          - total_orders
+          - average_order_value
+          - customer_retention_rate
+          - market_share
+        dimensions:
+          - sales_channel
+        time_dimension: daily_reports.report_date
+        granularity: week
+        refresh_key:
+          every: "2 hours"
+          
+      - name: monthly_sales_kpis
+        measures:
+          - total_revenue
+          - total_orders
+          - new_customers
+          - contracts_signed
+          - sales_target_achievement
+          - average_order_value
+          - customer_retention_rate
+        dimensions:
+          - sales_channel
+        time_dimension: daily_reports.report_date
+        granularity: month
+        refresh_key:
+          every: "1 day"
+          
+      - name: revenue_realtime
+        measures:
+          - total_revenue
+          - payment_received
+          - outstanding_receivables
+        dimensions:
+          - sales_channel
+        time_dimension: daily_reports.report_date
+        granularity: day
+        refresh_key:
+          every: "15 minutes"
+

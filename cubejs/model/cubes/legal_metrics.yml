@@ -1,0 +1,121 @@
+cubes:
+  - name: legal_metrics
+    sql_table: public.legal_metrics
+    data_source: default
+
+    joins:
+      - name: daily_reports
+        sql: "{CUBE}.report_id = {daily_reports}.report_id"
+        relationship: many_to_one
+
+    dimensions:
+      - name: metric_id
+        sql: metric_id
+        type: number
+        primary_key: true
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+      - name: contracts_under_review
+        sql: contracts_under_review
+        type: sum
+
+      - name: contract_amendments_review
+        sql: contract_amendments_review
+        type: sum
+
+      - name: new_contracts_stored
+        sql: new_contracts_stored
+        type: sum
+
+      - name: new_contracts_received
+        sql: new_contracts_received
+        type: sum
+
+      - name: contracts_need_negotiation
+        sql: contracts_need_negotiation
+        type: sum
+
+      - name: contract_disputes
+        sql: contract_disputes
+        type: sum
+
+      - name: compliance_rate
+        sql: compliance_rate
+        type: avg
+
+      - name: regulatory_warnings
+        sql: regulatory_warnings
+        type: sum
+
+      - name: legal_consultation_hours
+        sql: legal_consultation_hours
+        type: sum
+
+      - name: document_processing_count
+        sql: document_processing_count
+        type: sum
+
+      - name: legal_training_sessions
+        sql: legal_training_sessions
+        type: sum
+
+      - name: policy_updates
+        sql: policy_updates
+        type: sum
+
+      - name: audit_findings
+        sql: audit_findings
+        type: sum
+
+      - name: risk_assessments
+        sql: risk_assessments
+        type: sum
+
+    pre_aggregations:
+      - name: daily_legal_summary
+        measures:
+          - contracts_under_review
+          - new_contracts_received
+          - contract_disputes
+          - compliance_rate
+          - regulatory_warnings
+        time_dimension: daily_reports.report_date
+        granularity: day
+        refresh_key:
+          every: "2 hours"
+          
+      - name: weekly_compliance_tracking
+        measures:
+          - contracts_under_review
+          - contract_amendments_review
+          - new_contracts_stored
+          - compliance_rate
+          - legal_consultation_hours
+          - audit_findings
+        time_dimension: daily_reports.report_date
+        granularity: week
+        refresh_key:
+          every: "6 hours"
+          
+      - name: monthly_legal_kpis
+        measures:
+          - contracts_under_review
+          - new_contracts_stored
+          - contract_disputes
+          - compliance_rate
+          - legal_consultation_hours
+          - legal_training_sessions
+          - policy_updates
+          - risk_assessments
+        time_dimension: daily_reports.report_date
+        granularity: month
+        refresh_key:
+          every: "1 day"
+

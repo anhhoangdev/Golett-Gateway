@@ -1,0 +1,98 @@
+cubes:
+  - name: hr_metrics
+    sql_table: public.hr_metrics
+    data_source: default
+
+    joins:
+      - name: daily_reports
+        sql: "{CUBE}.report_id = {daily_reports}.report_id"
+        relationship: many_to_one
+
+    dimensions:
+      - name: metric_id
+        sql: metric_id
+        type: number
+        primary_key: true
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+      - name: applications_received
+        sql: applications_received
+        type: sum
+
+      - name: interviews_completed
+        sql: interviews_completed
+        type: sum
+
+      - name: new_hires
+        sql: new_hires
+        type: sum
+
+      - name: total_employees
+        sql: total_employees
+        type: sum
+
+      - name: late_employees
+        sql: late_employees
+        type: sum
+
+      - name: absent_employees
+        sql: absent_employees
+        type: sum
+
+      - name: overtime_employees
+        sql: overtime_employees
+        type: sum
+
+      - name: training_sessions
+        sql: training_sessions
+        type: sum
+
+      - name: training_participants
+        sql: training_participants
+        type: sum
+
+    pre_aggregations:
+      - name: daily_workforce_summary
+        measures:
+          - total_employees
+          - late_employees
+          - absent_employees
+          - overtime_employees
+          - new_hires
+        time_dimension: daily_reports.report_date
+        granularity: day
+        refresh_key:
+          every: "1 hour"
+          
+      - name: weekly_hr_activities
+        measures:
+          - applications_received
+          - interviews_completed
+          - new_hires
+          - training_sessions
+          - training_participants
+        time_dimension: daily_reports.report_date
+        granularity: week
+        refresh_key:
+          every: "4 hours"
+          
+      - name: monthly_hr_kpis
+        measures:
+          - total_employees
+          - new_hires
+          - applications_received
+          - interviews_completed
+          - training_sessions
+          - training_participants
+        time_dimension: daily_reports.report_date
+        granularity: month
+        refresh_key:
+          every: "1 day"
+

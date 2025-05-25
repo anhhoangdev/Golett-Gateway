@@ -1,0 +1,129 @@
+cubes:
+  - name: procurement_metrics
+    sql_table: public.procurement_metrics
+    data_source: default
+
+    joins:
+      - name: daily_reports
+        sql: "{CUBE}.report_id = {daily_reports}.report_id"
+        relationship: many_to_one
+
+    dimensions:
+      - name: metric_id
+        sql: metric_id
+        type: number
+        primary_key: true
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+      - name: total_suppliers
+        sql: total_suppliers
+        type: sum
+
+      - name: main_suppliers
+        sql: main_suppliers
+        type: sum
+
+      - name: evaluated_suppliers
+        sql: evaluated_suppliers
+        type: sum
+
+      - name: planned_orders
+        sql: planned_orders
+        type: sum
+
+      - name: new_planned_orders
+        sql: new_planned_orders
+        type: sum
+
+      - name: emergency_orders
+        sql: emergency_orders
+        type: sum
+
+      - name: on_time_deliveries
+        sql: on_time_deliveries
+        type: sum
+
+      - name: late_deliveries
+        sql: late_deliveries
+        type: sum
+
+      - name: returned_items
+        sql: returned_items
+        type: sum
+
+      - name: cost_savings
+        sql: cost_savings
+        type: sum
+
+      - name: total_procurement_cost
+        sql: total_procurement_cost
+        type: sum
+
+      - name: supplier_performance_score
+        sql: supplier_performance_score
+        type: avg
+
+      - name: quality_issues
+        sql: quality_issues
+        type: sum
+
+      - name: delivery_performance
+        sql: delivery_performance
+        type: avg
+
+      - name: price_variance
+        sql: price_variance
+        type: sum
+
+      - name: inventory_turnover
+        sql: inventory_turnover
+        type: avg
+
+    pre_aggregations:
+      - name: daily_procurement_summary
+        measures:
+          - total_suppliers
+          - planned_orders
+          - emergency_orders
+          - on_time_deliveries
+          - late_deliveries
+          - total_procurement_cost
+        time_dimension: daily_reports.report_date
+        granularity: day
+        refresh_key:
+          every: "1 hour"
+          
+      - name: supplier_performance_weekly
+        measures:
+          - total_suppliers
+          - main_suppliers
+          - evaluated_suppliers
+          - supplier_performance_score
+          - delivery_performance
+          - quality_issues
+        time_dimension: daily_reports.report_date
+        granularity: week
+        refresh_key:
+          every: "4 hours"
+          
+      - name: monthly_procurement_kpis
+        measures:
+          - total_suppliers
+          - total_procurement_cost
+          - cost_savings
+          - supplier_performance_score
+          - delivery_performance
+          - inventory_turnover
+          - price_variance
+        time_dimension: daily_reports.report_date
+        granularity: month
+        refresh_key:
+          every: "1 day"
+

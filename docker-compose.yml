@@ -10,16 +10,19 @@ services:
       POSTGRES_USER: golett_user
       POSTGRES_PASSWORD: golett_password
       POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_MULTIPLE_DATABASES: golett_db,farm_data
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-golett-init.sql
+      - ./farm_data/docker/init-scripts/01-create-multiple-databases.sh:/docker-entrypoint-initdb.d/00-create-databases.sh
+      - ./farm_data/create_database_schema.sql:/docker-entrypoint-initdb.d/02-farm-schema.sql
     networks:
       - golett-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U golett_user -d golett_db"]
+      test: ["CMD-SHELL", "pg_isready -U golett_user -d postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -143,6 +146,33 @@ services:
   #   profiles:
   #     - dev
   #   command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token=''
+
+  # CubeJS Server for Farm Data Analytics
+  cubejs:
+    image: cubejs/cube:latest
+    container_name: golett-cubejs
+    environment:
+      CUBEJS_DB_TYPE: postgres
+      CUBEJS_DB_HOST: postgres
+      CUBEJS_DB_NAME: farm_data
+      CUBEJS_DB_USER: golett_user
+      CUBEJS_DB_PASS: golett_password
+      CUBEJS_DB_PORT: 5432
+      CUBEJS_WEB_SOCKETS: "true"
+      CUBEJS_DEV_MODE: "true"
+      # CUBEJS_API_SECRET: farm_data_secret_key_change_in_production
+      CUBEJS_EXTERNAL_DEFAULT: "true"
+      CUBEJS_SCHEDULED_REFRESH_DEFAULT: "true"
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./cubejs:/cube/conf
+    networks:
+      - golett-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
 
 volumes:
   postgres_data:

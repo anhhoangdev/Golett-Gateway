@@ -27,18 +27,27 @@ class CubeJsClient:
         Initialize the Cube.js client.
         
         Args:
-            api_url: Base URL of the Cube.js API (e.g., "http://localhost:4000/cubejs-api/v1")
+            api_url: Base URL of the Cube.js API (e.g., "http://localhost:4000")
             api_token: Optional API token for authentication
             timeout: Request timeout in seconds
         """
-        self.api_url = api_url.rstrip('/')
+        # Ensure proper API URL format
+        self.base_url = api_url.rstrip('/')
+        
+        # Add the standard Cube.js API path if not already present
+        if not self.base_url.endswith('/cubejs-api/v1'):
+            if self.base_url.endswith('/cubejs-api'):
+                self.base_url += '/v1'
+            else:
+                self.base_url += '/cubejs-api/v1'
+        
         self.api_token = api_token or os.getenv("CUBEJS_API_TOKEN")
         self.timeout = timeout
         
         if not self.api_token:
             logger.warning("No Cube.js API token provided. Some requests may fail.")
             
-        logger.info(f"Initialized Cube.js client for {api_url}")
+        logger.info(f"Initialized Cube.js client for {self.base_url}")
     
     def _get_headers(self) -> Dict[str, str]:
         """Get headers for API requests."""
@@ -47,7 +56,8 @@ class CubeJsClient:
         }
         
         if self.api_token:
-            headers["Authorization"] = f"Bearer {self.api_token}"
+            # Use Authorization header as per Cube.js documentation
+            headers["Authorization"] = self.api_token
             
         return headers
     
@@ -61,7 +71,7 @@ class CubeJsClient:
         Returns:
             The query result data
         """
-        url = f"{self.api_url}/load"
+        url = f"{self.base_url}/load"
         headers = self._get_headers()
         
         try:
@@ -87,7 +97,7 @@ class CubeJsClient:
         Returns:
             The query result data
         """
-        url = f"{self.api_url}/sql"
+        url = f"{self.base_url}/sql"
         headers = self._get_headers()
         
         try:
@@ -110,7 +120,7 @@ class CubeJsClient:
         Returns:
             The metadata for all available cubes and their measures/dimensions
         """
-        url = f"{self.api_url}/meta"
+        url = f"{self.base_url}/meta"
         headers = self._get_headers()
         
         try:
@@ -135,7 +145,7 @@ class CubeJsClient:
         Returns:
             The SQL query that would be generated
         """
-        url = f"{self.api_url}/dry-run"
+        url = f"{self.base_url}/dry-run"
         headers = self._get_headers()
         
         try:
@@ -168,7 +178,7 @@ class CubeJsClient:
         Returns:
             The refresh status
         """
-        url = f"{self.api_url}/pre-aggregations/jobs/{query_id}"
+        url = f"{self.base_url}/pre-aggregations/jobs/{query_id}"
         headers = self._get_headers()
         
         try:
@@ -216,7 +226,7 @@ class CubeJsClient:
         Returns:
             The job status
         """
-        url = f"{self.api_url}/pre-aggregations/jobs/{job_id}"
+        url = f"{self.base_url}/pre-aggregations/jobs/{job_id}"
         headers = self._get_headers()
         
         try:
@@ -241,7 +251,7 @@ class CubeJsClient:
         Returns:
             The cancellation status
         """
-        url = f"{self.api_url}/pre-aggregations/jobs/{job_id}/cancel"
+        url = f"{self.base_url}/pre-aggregations/jobs/{job_id}/cancel"
         headers = self._get_headers()
         
         try:

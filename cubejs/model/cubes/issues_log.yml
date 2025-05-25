@@ -1,0 +1,98 @@
+cubes:
+  - name: issues_log
+    sql_table: public.issues_log
+    data_source: default
+
+    joins:
+      - name: companies
+        sql: "{CUBE}.company_id = {companies}.company_id"
+        relationship: many_to_one
+
+    dimensions:
+      - name: issue_id
+        sql: issue_id
+        type: number
+        primary_key: true
+
+      - name: issue_description
+        sql: issue_description
+        type: string
+
+      - name: severity
+        sql: severity
+        type: string
+
+      - name: status
+        sql: status
+        type: string
+
+      - name: assigned_to
+        sql: assigned_to
+        type: string
+
+      - name: resolution_notes
+        sql: resolution_notes
+        type: string
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+      - name: resolved_at
+        sql: resolved_at
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      - name: daily_issues_summary
+        measures:
+          - count
+        dimensions:
+          - severity
+          - status
+        time_dimension: created_at
+        granularity: day
+        refresh_key:
+          every: "30 minutes"
+          
+      - name: issues_by_company
+        measures:
+          - count
+        dimensions:
+          - companies.company_name
+          - companies.department_type
+          - severity
+          - status
+        time_dimension: created_at
+        granularity: day
+        refresh_key:
+          every: "1 hour"
+          
+      - name: weekly_issues_trends
+        measures:
+          - count
+        dimensions:
+          - severity
+          - status
+          - companies.department_type
+        time_dimension: created_at
+        granularity: week
+        refresh_key:
+          every: "4 hours"
+          
+      - name: monthly_issues_analysis
+        measures:
+          - count
+        dimensions:
+          - severity
+          - status
+          - companies.company_name
+          - companies.department_type
+        time_dimension: created_at
+        granularity: month
+        refresh_key:
+          every: "1 day"
+

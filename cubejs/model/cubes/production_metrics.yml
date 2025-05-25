@@ -1,0 +1,112 @@
+cubes:
+  - name: production_metrics
+    sql_table: public.production_metrics
+    data_source: default
+
+    joins:
+      - name: daily_reports
+        sql: "{CUBE}.report_id = {daily_reports}.report_id"
+        relationship: many_to_one
+
+    dimensions:
+      - name: metric_id
+        sql: metric_id
+        type: number
+        primary_key: true
+
+      - name: company_code
+        sql: company_code
+        type: string
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+      - name: raw_material_volume
+        sql: raw_material_volume
+        type: sum
+
+      - name: finished_product_volume
+        sql: finished_product_volume
+        type: sum
+
+      - name: product_10kg_volume
+        sql: product_10kg_volume
+        type: sum
+
+      - name: product_5kg_volume
+        sql: product_5kg_volume
+        type: sum
+
+      - name: product_small_volume
+        sql: product_small_volume
+        type: sum
+
+      - name: aseptic_volume
+        sql: aseptic_volume
+        type: sum
+
+      - name: total_consumption
+        sql: total_consumption
+        type: sum
+
+      - name: consumption_kdqt
+        sql: consumption_kdqt
+        type: sum
+
+      - name: consumption_kdnd
+        sql: consumption_kdnd
+        type: sum
+
+      - name: consumption_b2c
+        sql: consumption_b2c
+        type: sum
+
+      - name: efficiency_cut
+        sql: efficiency_cut
+        type: avg
+
+      - name: efficiency_aseptic
+        sql: efficiency_aseptic
+        type: avg
+
+      - name: error_rate
+        sql: error_rate
+        type: avg
+
+      - name: complaint_rate
+        sql: complaint_rate
+        type: avg
+
+      - name: direct_labor_count
+        sql: direct_labor_count
+        type: sum
+
+      - name: indirect_labor_count
+        sql: indirect_labor_count
+        type: sum
+
+      - name: aloe_seedling_a1_count
+        sql: aloe_seedling_a1_count
+        type: sum
+
+      - name: aloe_seedling_sa01_count
+        sql: aloe_seedling_sa01_count
+        type: sum
+
+      - name: cluster_production_count
+        sql: cluster_production_count
+        type: sum
+
+      - name: downtime_minutes
+        sql: downtime_minutes
+        type: sum
+
+    pre_aggregations:
+      # Pre-aggregation definitions go here.
+      # Learn more in the documentation: https://cube.dev/docs/caching/pre-aggregations/getting-started
+

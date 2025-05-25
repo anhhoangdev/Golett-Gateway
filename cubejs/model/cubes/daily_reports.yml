@@ -1,0 +1,75 @@
+cubes:
+  - name: daily_reports
+    sql_table: public.daily_reports
+    data_source: default
+
+    joins:
+      - name: companies
+        sql: "{CUBE}.company_id = {companies}.company_id"
+        relationship: many_to_one
+
+    dimensions:
+      - name: report_id
+        sql: report_id
+        type: number
+        primary_key: true
+
+      - name: report_type
+        sql: report_type
+        type: string
+
+      - name: created_date
+        sql: created_date
+        type: time
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+      - name: updated_at
+        sql: updated_at
+        type: time
+
+      - name: report_date
+        sql: report_date
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+    pre_aggregations:
+      - name: daily_reports_by_date
+        measures:
+          - count
+        dimensions:
+          - report_date
+          - report_type
+        time_dimension: report_date
+        granularity: day
+        refresh_key:
+          every: "1 hour"
+        
+      - name: daily_reports_by_company
+        measures:
+          - count
+        dimensions:
+          - companies.company_name
+          - companies.department_type
+          - report_type
+        time_dimension: report_date
+        granularity: day
+        refresh_key:
+          every: "1 hour"
+          
+      - name: monthly_reports_summary
+        measures:
+          - count
+        dimensions:
+          - report_type
+          - companies.department_type
+        time_dimension: report_date
+        granularity: month
+        refresh_key:
+          every: "1 day"
+

@@ -1,0 +1,105 @@
+cubes:
+  - name: rnd_metrics
+    sql_table: public.rnd_metrics
+    data_source: default
+
+    joins:
+      - name: daily_reports
+        sql: "{CUBE}.report_id = {daily_reports}.report_id"
+        relationship: many_to_one
+
+    dimensions:
+      - name: metric_id
+        sql: metric_id
+        type: number
+        primary_key: true
+
+      - name: created_at
+        sql: created_at
+        type: time
+
+    measures:
+      - name: count
+        type: count
+
+      - name: research_projects
+        sql: research_projects
+        type: sum
+
+      - name: experiments_conducted
+        sql: experiments_conducted
+        type: sum
+
+      - name: samples_tested
+        sql: samples_tested
+        type: sum
+
+      - name: quality_tests
+        sql: quality_tests
+        type: sum
+
+      - name: new_formulations
+        sql: new_formulations
+        type: sum
+
+      - name: patent_applications
+        sql: patent_applications
+        type: sum
+
+      - name: research_hours
+        sql: research_hours
+        type: sum
+
+      - name: equipment_utilization
+        sql: equipment_utilization
+        type: avg
+
+      - name: research_budget_used
+        sql: research_budget_used
+        type: sum
+
+      - name: collaboration_meetings
+        sql: collaboration_meetings
+        type: sum
+
+    pre_aggregations:
+      - name: daily_rnd_summary
+        measures:
+          - research_projects
+          - experiments_conducted
+          - samples_tested
+          - quality_tests
+          - research_hours
+        time_dimension: daily_reports.report_date
+        granularity: day
+        refresh_key:
+          every: "2 hours"
+          
+      - name: weekly_rnd_activities
+        measures:
+          - research_projects
+          - experiments_conducted
+          - new_formulations
+          - patent_applications
+          - equipment_utilization
+          - collaboration_meetings
+        time_dimension: daily_reports.report_date
+        granularity: week
+        refresh_key:
+          every: "6 hours"
+          
+      - name: monthly_rnd_kpis
+        measures:
+          - research_projects
+          - experiments_conducted
+          - samples_tested
+          - new_formulations
+          - patent_applications
+          - research_hours
+          - research_budget_used
+          - equipment_utilization
+        time_dimension: daily_reports.report_date
+        granularity: month
+        refresh_key:
+          every: "1 day"
+
