@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional, Union, Type
 import json
+import os
 
 from crewai.tools import BaseTool
 from pydantic import Field, BaseModel, field_validator
@@ -7,6 +8,359 @@ from golett.tools.cube.client import CubeJsClient
 from golett.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Global CubeJS knowledge cache
+_cubejs_knowledge_cache = None
+_knowledge_initialized = False
+
+def initialize_cubejs_knowledge(memory_manager=None, session_id: str = "cubejs_tools_session"):
+    """
+    Initialize CubeJS knowledge sources using Golett's knowledge system.
+    
+    Args:
+        memory_manager: Golett memory manager instance
+        session_id: Session ID for knowledge storage
+    """
+    global _cubejs_knowledge_cache, _knowledge_initialized
+    
+    if _knowledge_initialized and _cubejs_knowledge_cache:
+        return _cubejs_knowledge_cache
+    
+    # Get the core knowledge directory path (internal to the package)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    core_knowledge_dir = os.path.join(current_dir, "core_knowledge")
+    
+    # If no memory manager provided, try to use simple file reading
+    if memory_manager is None:
+        try:
+            from golett.memory.memory_manager import MemoryManager
+            # Try to create with minimal config (will use local storage if no DB)
+            memory_manager = MemoryManager()
+        except Exception as e:
+            logger.warning(f"Could not create memory manager for CubeJS knowledge: {e}")
+            # Fall back to simple file-based knowledge cache
+            return _initialize_simple_file_knowledge(core_knowledge_dir)
+    
+    try:
+        # Import Golett knowledge system
+        from golett.knowledge.sources import GolettAdvancedTextFileKnowledgeSource, KnowledgeRetrievalStrategy
+        from golett.memory.memory_manager import MemoryLayer
+        
+        knowledge_sources = {}
+        
+        # Load REST API knowledge from internal core_knowledge
+        rest_api_path = os.path.join(core_knowledge_dir, "rest_api.md")
+        if os.path.exists(rest_api_path):
+            try:
+                rest_api_source = GolettAdvancedTextFileKnowledgeSource(
+                    file_path=rest_api_path,
+                    memory_manager=memory_manager,
+                    session_id=session_id,
+                    collection_name="cubejs_rest_api",
+                    memory_layer=MemoryLayer.LONG_TERM,
+                    tags=["cubejs", "rest_api", "query_format", "time_dimensions", "filters"],
+                    importance=0.9,
+                    chunk_size=800,
+                    overlap_size=100
+                )
+                # Add to knowledge system
+                chunks = rest_api_source.add()
+                knowledge_sources["rest_api"] = {
+                    "source": rest_api_source,
+                    "chunks": len(chunks),
+                    "path": rest_api_path
+                }
+                logger.info(f"Loaded CubeJS REST API knowledge: {len(chunks)} chunks from {rest_api_path}")
+            except Exception as e:
+                logger.warning(f"Could not load REST API knowledge: {e}")
+        
+        # Check for schemas knowledge (if it exists in core_knowledge)
+        schemas_path = os.path.join(core_knowledge_dir, "schemas.md")
+        if os.path.exists(schemas_path):
+            try:
+                schemas_source = GolettAdvancedTextFileKnowledgeSource(
+                    file_path=schemas_path,
+                    memory_manager=memory_manager,
+                    session_id=session_id,
+                    collection_name="cubejs_schemas",
+                    memory_layer=MemoryLayer.LONG_TERM,
+                    tags=["cubejs", "schemas", "data_modeling", "cubes", "measures", "dimensions"],
+                    importance=0.8,
+                    chunk_size=800,
+                    overlap_size=100
+                )
+                # Add to knowledge system
+                chunks = schemas_source.add()
+                knowledge_sources["schemas"] = {
+                    "source": schemas_source,
+                    "chunks": len(chunks),
+                    "path": schemas_path
+                }
+                logger.info(f"Loaded CubeJS schemas knowledge: {len(chunks)} chunks from {schemas_path}")
+            except Exception as e:
+                logger.warning(f"Could not load schemas knowledge: {e}")
+        
+        _cubejs_knowledge_cache = knowledge_sources
+        _knowledge_initialized = True
+        
+        logger.info(f"Initialized CubeJS knowledge system with {len(knowledge_sources)} sources from core_knowledge")
+        return knowledge_sources
+        
+    except ImportError:
+        logger.warning("Golett knowledge system not available for CubeJS tools")
+        return _initialize_simple_file_knowledge(core_knowledge_dir)
+    except Exception as e:
+        logger.error(f"Error initializing CubeJS knowledge: {e}")
+        return _initialize_simple_file_knowledge(core_knowledge_dir)
+
+def _initialize_simple_file_knowledge(core_knowledge_dir: str) -> Dict[str, Any]:
+    """
+    Initialize simple file-based knowledge cache when Golett system is unavailable.
+    
+    Args:
+        core_knowledge_dir: Path to the core knowledge directory
+        
+    Returns:
+        Simple knowledge cache with file contents
+    """
+    global _cubejs_knowledge_cache, _knowledge_initialized
+    
+    knowledge_sources = {}
+    
+    # Load REST API knowledge
+    rest_api_path = os.path.join(core_knowledge_dir, "rest_api.md")
+    if os.path.exists(rest_api_path):
+        try:
+            with open(rest_api_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            knowledge_sources["rest_api"] = {
+                "content": content,
+                "chunks": len(content.split('\n\n')),  # Simple chunk count
+                "path": rest_api_path,
+                "type": "simple_file"
+            }
+            logger.info(f"Loaded CubeJS REST API knowledge (simple): {len(content)} chars from {rest_api_path}")
+        except Exception as e:
+            logger.warning(f"Could not load REST API knowledge file: {e}")
+    
+    # Load schemas knowledge
+    schemas_path = os.path.join(core_knowledge_dir, "schemas.md")
+    if os.path.exists(schemas_path):
+        try:
+            with open(schemas_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            knowledge_sources["schemas"] = {
+                "content": content,
+                "chunks": len(content.split('\n\n')),  # Simple chunk count
+                "path": schemas_path,
+                "type": "simple_file"
+            }
+            logger.info(f"Loaded CubeJS schemas knowledge (simple): {len(content)} chars from {schemas_path}")
+        except Exception as e:
+            logger.warning(f"Could not load schemas knowledge file: {e}")
+    
+    _cubejs_knowledge_cache = knowledge_sources
+    _knowledge_initialized = True
+    
+    logger.info(f"Initialized simple CubeJS knowledge cache with {len(knowledge_sources)} sources")
+    return knowledge_sources
+
+def get_cubejs_knowledge_fallback(error_context: str = "", memory_manager=None) -> str:
+    """
+    Retrieve CubeJS knowledge for error handling and guidance using Golett's knowledge system.
+    
+    Args:
+        error_context: Context about the error to get relevant knowledge
+        memory_manager: Optional memory manager instance
+        
+    Returns:
+        Relevant CubeJS knowledge text
+    """
+    try:
+        # Initialize knowledge if not already done
+        knowledge_sources = initialize_cubejs_knowledge(memory_manager)
+        
+        if not knowledge_sources:
+            # Fallback to basic knowledge if no sources available
+            return _get_basic_cubejs_knowledge(error_context)
+        
+        # Check if we have Golett knowledge sources or simple file sources
+        knowledge_content = []
+        
+        # Handle Golett knowledge sources
+        if any(source.get("type") != "simple_file" for source in knowledge_sources.values()):
+            try:
+                # Import retrieval strategy for Golett sources
+                from golett.knowledge.sources import KnowledgeRetrievalStrategy
+                
+                # Determine which knowledge source to query based on error context
+                query_terms = error_context.lower()
+                
+                # Query REST API knowledge for format-related errors
+                if any(term in query_terms for term in ["time dimension", "filter", "query format", "dimension", "member"]):
+                    if "rest_api" in knowledge_sources and knowledge_sources["rest_api"].get("type") != "simple_file":
+                        try:
+                            source = knowledge_sources["rest_api"]["source"]
+                            results = source.retrieve(
+                                query=error_context,
+                                limit=3,
+                                strategy=KnowledgeRetrievalStrategy.SEMANTIC,
+                                include_metadata=False
+                            )
+                            for result in results:
+                                content = result.get("content", "")
+                                if content:
+                                    knowledge_content.append(content[:500])  # Limit length
+                        except Exception as e:
+                            logger.warning(f"Error retrieving REST API knowledge: {e}")
+                
+                # Query schemas knowledge for cube/measure/dimension errors
+                if any(term in query_terms for term in ["cube", "measure", "schema", "data model"]):
+                    if "schemas" in knowledge_sources and knowledge_sources["schemas"].get("type") != "simple_file":
+                        try:
+                            source = knowledge_sources["schemas"]["source"]
+                            results = source.retrieve(
+                                query=error_context,
+                                limit=2,
+                                strategy=KnowledgeRetrievalStrategy.SEMANTIC,
+                                include_metadata=False
+                            )
+                            for result in results:
+                                content = result.get("content", "")
+                                if content:
+                                    knowledge_content.append(content[:500])  # Limit length
+                        except Exception as e:
+                            logger.warning(f"Error retrieving schemas knowledge: {e}")
+                
+                # If no specific knowledge found, get general knowledge
+                if not knowledge_content and "rest_api" in knowledge_sources and knowledge_sources["rest_api"].get("type") != "simple_file":
+                    try:
+                        source = knowledge_sources["rest_api"]["source"]
+                        results = source.retrieve(
+                            query="CubeJS query format basics",
+                            limit=2,
+                            strategy=KnowledgeRetrievalStrategy.HYBRID,
+                            include_metadata=False
+                        )
+                        for result in results:
+                            content = result.get("content", "")
+                            if content:
+                                knowledge_content.append(content[:400])
+                    except Exception as e:
+                        logger.warning(f"Error retrieving general CubeJS knowledge: {e}")
+                        
+            except ImportError:
+                # Fall through to simple file handling
+                pass
+        
+        # Handle simple file-based knowledge sources
+        if not knowledge_content:
+            query_terms = error_context.lower()
+            
+            # Get relevant sections from simple file sources
+            if any(term in query_terms for term in ["time dimension", "filter", "query format", "dimension", "member"]):
+                if "rest_api" in knowledge_sources and knowledge_sources["rest_api"].get("type") == "simple_file":
+                    content = knowledge_sources["rest_api"]["content"]
+                    # Extract relevant sections (simple text search)
+                    lines = content.split('\n')
+                    relevant_lines = []
+                    for i, line in enumerate(lines):
+                        if any(term in line.lower() for term in ["time dimension", "filter", "query format"]):
+                            # Include context around the match
+                            start = max(0, i - 3)
+                            end = min(len(lines), i + 10)
+                            relevant_lines.extend(lines[start:end])
+                            break
+                    if relevant_lines:
+                        knowledge_content.append('\n'.join(relevant_lines[:20]))  # Limit lines
+            
+            if any(term in query_terms for term in ["cube", "measure", "schema", "data model"]):
+                if "schemas" in knowledge_sources and knowledge_sources["schemas"].get("type") == "simple_file":
+                    content = knowledge_sources["schemas"]["content"]
+                    # Extract relevant sections (simple text search)
+                    lines = content.split('\n')
+                    relevant_lines = []
+                    for i, line in enumerate(lines):
+                        if any(term in line.lower() for term in ["cube", "measure", "schema"]):
+                            # Include context around the match
+                            start = max(0, i - 3)
+                            end = min(len(lines), i + 10)
+                            relevant_lines.extend(lines[start:end])
+                            break
+                    if relevant_lines:
+                        knowledge_content.append('\n'.join(relevant_lines[:20]))  # Limit lines
+            
+            # If no specific knowledge found, get general sections
+            if not knowledge_content and "rest_api" in knowledge_sources and knowledge_sources["rest_api"].get("type") == "simple_file":
+                content = knowledge_sources["rest_api"]["content"]
+                # Get the first few sections
+                sections = content.split('\n\n')
+                knowledge_content.append('\n\n'.join(sections[:3]))
+        
+        if knowledge_content:
+            return "\n\n".join(knowledge_content)
+        
+    except Exception as e:
+        logger.warning(f"Error retrieving CubeJS knowledge: {e}")
+    
+    # Fallback to basic knowledge
+    return _get_basic_cubejs_knowledge(error_context)
+
+def _get_basic_cubejs_knowledge(error_context: str = "") -> str:
+    """
+    Fallback basic CubeJS knowledge when Golett system is unavailable.
+    
+    Args:
+        error_context: Context about the error
+        
+    Returns:
+        Basic CubeJS knowledge text
+    """
+    if "time dimension" in error_context.lower():
+        return """
+**Time Dimensions Format (CubeJS):**
+
+Time dimensions MUST use "dimension" field (NOT "member"):
+✅ CORRECT: {"dimension": "cube.field", "granularity": "month"}
+❌ WRONG: {"member": "cube.field", "granularity": "month"}
+
+Required fields:
+- dimension: The time field name (e.g., "sales_metrics.created_at")
+- granularity: Time granularity ("day", "week", "month", "quarter", "year")
+
+Optional fields:
+- dateRange: Array of start and end dates ["2023-01-01", "2023-12-31"]
+"""
+    
+    elif "filter" in error_context.lower():
+        return """
+**Filters Format (CubeJS):**
+
+Filters MUST use "member" field (NOT "dimension"):
+✅ CORRECT: {"member": "cube.field", "operator": "equals", "values": ["value"]}
+❌ WRONG: {"dimension": "cube.field", "operator": "equals", "values": ["value"]}
+
+Common operators:
+- equals, notEquals: Exact matching
+- gt, gte, lt, lte: Numeric comparisons  
+- contains, notContains: String matching
+- set, notSet: Null/not null checks
+"""
+    
+    else:
+        return """
+**Basic CubeJS Query Format:**
+
+Time Dimensions use "dimension":
+{"dimension": "cube.field", "granularity": "month"}
+
+Filters use "member":
+{"member": "cube.field", "operator": "equals", "values": ["value"]}
+
+Always use cube prefixes: "cube_name.field_name"
+Common granularities: day, week, month, quarter, year
+Common operators: equals, notEquals, gt, gte, lt, lte, contains
+"""
 
 class BuildCubeQuerySchema(BaseModel):
     """Schema for BuildCubeQueryTool parameters"""
@@ -97,12 +451,14 @@ class CubeJsMetadataTool(BaseTool):
     
     # Declare Pydantic fields
     client: CubeJsClient = Field(default=None, description="CubeJS client instance")
+    memory_manager: Any = Field(default=None, description="Optional memory manager for knowledge fallback")
     
     def __init__(
         self, 
         api_url: str,
         api_token: Optional[str] = None,
         timeout: int = 30,
+        memory_manager=None,
         **kwargs
     ):
         """
@@ -112,10 +468,20 @@ class CubeJsMetadataTool(BaseTool):
             api_url: Base URL of the Cube.js API
             api_token: Optional API token for authentication
             timeout: Request timeout in seconds
+            memory_manager: Optional memory manager for knowledge fallback
         """
         # Create client and set it in kwargs
         kwargs['client'] = CubeJsClient(api_url, api_token, timeout)
+        kwargs['memory_manager'] = memory_manager
         super().__init__(**kwargs)
+        
+        # Initialize CubeJS knowledge system if memory manager available
+        if memory_manager:
+            try:
+                initialize_cubejs_knowledge(memory_manager)
+            except Exception as e:
+                logger.warning(f"Could not initialize CubeJS knowledge: {e}")
+        
         logger.info("Initialized Cube.js metadata tool")
         
     def _run(self, cube_name: Optional[str] = None) -> Dict[str, Any]:
@@ -157,12 +523,14 @@ class ExecuteCubeQueryTool(BaseTool):
     
     # Declare Pydantic fields
     client: CubeJsClient = Field(default=None, description="CubeJS client instance")
+    memory_manager: Any = Field(default=None, description="Optional memory manager for knowledge fallback")
     
     def __init__(
         self, 
         api_url: str,
         api_token: Optional[str] = None,
         timeout: int = 30,
+        memory_manager=None,
         **kwargs
     ):
         """
@@ -172,10 +540,20 @@ class ExecuteCubeQueryTool(BaseTool):
             api_url: Base URL of the Cube.js API
             api_token: Optional API token for authentication
             timeout: Request timeout in seconds
+            memory_manager: Optional memory manager for knowledge fallback
         """
         # Create client and set it in kwargs
         kwargs['client'] = CubeJsClient(api_url, api_token, timeout)
+        kwargs['memory_manager'] = memory_manager
         super().__init__(**kwargs)
+        
+        # Initialize CubeJS knowledge system if memory manager available
+        if memory_manager:
+            try:
+                initialize_cubejs_knowledge(memory_manager)
+            except Exception as e:
+                logger.warning(f"Could not initialize CubeJS knowledge: {e}")
+        
         logger.info("Initialized Cube.js query execution tool")
         
     def _preprocess_data_for_analysis(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -351,54 +729,71 @@ class ExecuteCubeQueryTool(BaseTool):
     
     def _parse_cubejs_error(self, error_message: str, query: Dict[str, Any]) -> str:
         """
-        Parse CubeJS error messages and provide actionable feedback.
+        Parse CubeJS error messages and provide actionable feedback with knowledge fallback.
         
         Args:
             error_message: The raw error message from CubeJS
             query: The query that caused the error
             
         Returns:
-            Actionable feedback for the agent
+            Actionable feedback for the agent with CubeJS knowledge
         """
         error_lower = error_message.lower()
         
+        # Get relevant knowledge based on error type using Golett knowledge system
+        knowledge_context = ""
+        if "time dimension" in error_lower:
+            knowledge_context = get_cubejs_knowledge_fallback("time dimension error", self.memory_manager)
+        elif "filter" in error_lower:
+            knowledge_context = get_cubejs_knowledge_fallback("filter error", self.memory_manager)
+        elif "measure" in error_lower or "dimension" in error_lower:
+            knowledge_context = get_cubejs_knowledge_fallback("measure dimension error", self.memory_manager)
+        else:
+            knowledge_context = get_cubejs_knowledge_fallback("general query error", self.memory_manager)
+        
         # Common CubeJS validation errors and their fixes
         if "order[0]" in error_message and "must be an array" in error_message:
-            return ("ORDER FORMAT ERROR: The 'order' parameter must be an array of objects. "
+            error_guidance = ("ORDER FORMAT ERROR: The 'order' parameter must be an array of objects. "
                    "Correct format: [{\"id\": \"measure_name\", \"desc\": \"asc\"}] or [{\"id\": \"dimension_name\", \"desc\": \"desc\"}]")
         
         elif "invalid query format" in error_lower:
-            return ("QUERY FORMAT ERROR: The query structure is invalid. Check that all parameters follow CubeJS JSON format.")
+            error_guidance = ("QUERY FORMAT ERROR: The query structure is invalid. Check that all parameters follow CubeJS JSON format.")
         
         elif "unknown measure" in error_lower or "measure not found" in error_lower:
-            return ("MEASURE ERROR: One or more measures don't exist. Use BuildCubeQuery tool to validate available measures.")
+            error_guidance = ("MEASURE ERROR: One or more measures don't exist. Use BuildCubeQuery tool to validate available measures.")
         
         elif "unknown dimension" in error_lower or "dimension not found" in error_lower:
-            return ("DIMENSION ERROR: One or more dimensions don't exist. Use BuildCubeQuery tool to validate available dimensions.")
+            error_guidance = ("DIMENSION ERROR: One or more dimensions don't exist. Use BuildCubeQuery tool to validate available dimensions.")
         
         elif "time dimension" in error_lower and "invalid" in error_lower:
-            return ("TIME DIMENSION ERROR: Time dimension format is invalid. Use format: [{\"dimension\": \"Cube.timeField\", \"granularity\": \"day\", \"dateRange\": [\"start\", \"end\"]}]")
+            error_guidance = ("TIME DIMENSION ERROR: Time dimension format is invalid. Use format: [{\"dimension\": \"Cube.timeField\", \"granularity\": \"day\", \"dateRange\": [\"start\", \"end\"]}]")
         
         elif "filter" in error_lower and "invalid" in error_lower:
-            return ("FILTER ERROR: Filter format is invalid. Use format: [{\"member\": \"Cube.field\", \"operator\": \"equals\", \"values\": [\"value\"]}]")
+            error_guidance = ("FILTER ERROR: Filter format is invalid. Use format: [{\"member\": \"Cube.field\", \"operator\": \"equals\", \"values\": [\"value\"]}]")
         
         elif "400" in error_message or "bad request" in error_lower:
-            return ("BAD REQUEST: The query parameters are malformed. Check field names, operators, and data types.")
+            error_guidance = ("BAD REQUEST: The query parameters are malformed. Check field names, operators, and data types.")
         
         elif "401" in error_message or "unauthorized" in error_lower:
-            return ("AUTHENTICATION ERROR: Invalid or missing API token.")
+            error_guidance = ("AUTHENTICATION ERROR: Invalid or missing API token.")
         
         elif "403" in error_message or "forbidden" in error_lower:
-            return ("PERMISSION ERROR: Access denied to requested data.")
+            error_guidance = ("PERMISSION ERROR: Access denied to requested data.")
         
         elif "404" in error_message or "not found" in error_lower:
-            return ("ENDPOINT ERROR: CubeJS API endpoint not found. Check the API URL.")
+            error_guidance = ("ENDPOINT ERROR: CubeJS API endpoint not found. Check the API URL.")
         
         elif "timeout" in error_lower or "connection" in error_lower:
-            return ("CONNECTION ERROR: Unable to connect to CubeJS server. Check if the server is running.")
+            error_guidance = ("CONNECTION ERROR: Unable to connect to CubeJS server. Check if the server is running.")
         
         else:
-            return f"UNKNOWN ERROR: {error_message}. Please check the query format and try again."
+            error_guidance = f"UNKNOWN ERROR: {error_message}. Please check the query format and try again."
+        
+        # Combine error guidance with knowledge
+        if knowledge_context:
+            return f"{error_guidance}\n\n**CubeJS Knowledge Reference:**\n{knowledge_context}"
+        else:
+            return error_guidance
     
     def _generate_retry_suggestions(self, error_message: str, query: Dict[str, Any]) -> List[str]:
         """
@@ -517,12 +912,14 @@ class BuildCubeQueryTool(BaseTool):
     
     # Declare Pydantic fields
     client: CubeJsClient = Field(default=None, description="CubeJS client instance")
+    memory_manager: Any = Field(default=None, description="Optional memory manager for knowledge fallback")
     
     def __init__(
         self, 
         api_url: str,
         api_token: Optional[str] = None,
         timeout: int = 30,
+        memory_manager=None,
         **kwargs
     ):
         """
@@ -532,10 +929,20 @@ class BuildCubeQueryTool(BaseTool):
             api_url: Base URL of the Cube.js API
             api_token: Optional API token for authentication
             timeout: Request timeout in seconds
+            memory_manager: Optional memory manager for knowledge fallback
         """
         # Create client and set it in kwargs
         kwargs['client'] = CubeJsClient(api_url, api_token, timeout)
+        kwargs['memory_manager'] = memory_manager
         super().__init__(**kwargs)
+        
+        # Initialize CubeJS knowledge system if memory manager available
+        if memory_manager:
+            try:
+                initialize_cubejs_knowledge(memory_manager)
+            except Exception as e:
+                logger.warning(f"Could not initialize CubeJS knowledge: {e}")
+        
         logger.info("Initialized Cube.js query builder tool")
         
     def _validate_and_fix_filters_and_time_dims(
@@ -581,7 +988,7 @@ class BuildCubeQueryTool(BaseTool):
             for filter_obj in filters:
                 fixed_filter = filter_obj.copy()
                 
-                # Fix dimension -> member
+                # Fix dimension -> member (for filters only)
                 if "dimension" in fixed_filter:
                     fixed_filter["member"] = fixed_filter.pop("dimension")
                 
@@ -600,10 +1007,15 @@ class BuildCubeQueryTool(BaseTool):
             for time_dim in time_dimensions:
                 fixed_time_dim = time_dim.copy()
                 
-                # Fix dimension -> member
-                if "dimension" in fixed_time_dim:
-                    fixed_time_dim["member"] = fixed_time_dim.pop("dimension")
-                    logger.info(f"Fixed time dimension: dimension -> member")
+                # For time dimensions, ensure we use "dimension" not "member"
+                if "member" in fixed_time_dim:
+                    fixed_time_dim["dimension"] = fixed_time_dim.pop("member")
+                    logger.info(f"Fixed time dimension: member -> dimension")
+                
+                # Ensure time dimensions have the correct format
+                # Time dimensions should have "dimension" and "granularity"
+                if "dimension" not in fixed_time_dim and "member" not in fixed_time_dim:
+                    logger.warning(f"Time dimension missing dimension field: {fixed_time_dim}")
                 
                 validated_time_dimensions.append(fixed_time_dim)
         
@@ -798,7 +1210,41 @@ class BuildCubeQueryTool(BaseTool):
             
         except Exception as e:
             logger.error(f"Error building Cube.js query: {e}")
-            return {"error": str(e)}
+            
+            # Get relevant knowledge for query building errors using Golett knowledge system
+            error_context = f"query building error: {str(e)}"
+            knowledge_fallback = get_cubejs_knowledge_fallback(error_context, self.memory_manager)
+            
+            # Parse the error for actionable feedback
+            error_message = str(e)
+            actionable_feedback = f"BUILD QUERY ERROR: {error_message}"
+            
+            # Add specific guidance based on error type
+            if "measure" in error_message.lower():
+                actionable_feedback += "\n\nMEASURE VALIDATION FAILED: Check that measure names exist and use proper cube.measure format."
+            elif "dimension" in error_message.lower():
+                actionable_feedback += "\n\nDIMENSION VALIDATION FAILED: Check that dimension names exist and use proper cube.dimension format."
+            elif "time dimension" in error_message.lower():
+                actionable_feedback += "\n\nTIME DIMENSION ERROR: Ensure time dimensions use 'dimension' field with proper granularity."
+            elif "filter" in error_message.lower():
+                actionable_feedback += "\n\nFILTER ERROR: Ensure filters use 'member' field with valid operators and values."
+            
+            # Combine with knowledge fallback
+            if knowledge_fallback:
+                actionable_feedback += f"\n\n**CubeJS Knowledge Reference:**\n{knowledge_fallback}"
+            
+            return {
+                "error": error_message,
+                "actionable_feedback": actionable_feedback,
+                "status": "query_build_failed",
+                "retry_suggestions": [
+                    "Validate measure and dimension names against schema",
+                    "Ensure proper cube.field format for all fields",
+                    "Check time dimension format: {'dimension': 'cube.field', 'granularity': 'month'}",
+                    "Check filter format: {'member': 'cube.field', 'operator': 'equals', 'values': ['value']}",
+                    "Use CubeJsMetadata tool to get available fields"
+                ]
+            }
 
 
 class AnalyzeDataPointToolSchema(BaseModel):
@@ -816,12 +1262,14 @@ class AnalyzeDataPointTool(BaseTool):
     
     # Declare Pydantic fields
     client: CubeJsClient = Field(default=None, description="CubeJS client instance")
+    memory_manager: Any = Field(default=None, description="Optional memory manager for knowledge fallback")
     
     def __init__(
         self, 
         api_url: str,
         api_token: Optional[str] = None,
         timeout: int = 30,
+        memory_manager=None,
         **kwargs
     ):
         """
@@ -831,10 +1279,20 @@ class AnalyzeDataPointTool(BaseTool):
             api_url: Base URL of the Cube.js API
             api_token: Optional API token for authentication
             timeout: Request timeout in seconds
+            memory_manager: Optional memory manager for knowledge fallback
         """
         # Create client and set it in kwargs
         kwargs['client'] = CubeJsClient(api_url, api_token, timeout)
+        kwargs['memory_manager'] = memory_manager
         super().__init__(**kwargs)
+        
+        # Initialize CubeJS knowledge system if memory manager available
+        if memory_manager:
+            try:
+                initialize_cubejs_knowledge(memory_manager)
+            except Exception as e:
+                logger.warning(f"Could not initialize CubeJS knowledge: {e}")
+        
         logger.info("Initialized Cube.js data point analysis tool")
         
     def _run(
@@ -857,11 +1315,11 @@ class AnalyzeDataPointTool(BaseTool):
                 return {"error": f"Cannot analyze query with error: {query_result['error']}"}
             
             # Use processed data if available, otherwise fall back to raw data
-            if "processed_data" in query_result:
+            if "processed_data" in query_result and isinstance(query_result["processed_data"], dict):
                 processed_data = query_result["processed_data"]
-                data = processed_data["records"]
-                summary = processed_data["summary"]
-                metadata = processed_data["metadata"]
+                data = processed_data.get("records", [])
+                summary = processed_data.get("summary", {})
+                metadata = processed_data.get("metadata", {})
             else:
                 # Fallback to raw data format
                 if "data" not in query_result:
@@ -869,6 +1327,24 @@ class AnalyzeDataPointTool(BaseTool):
                 data = query_result["data"]
                 summary = {}
                 metadata = {}
+            
+            # Ensure metadata has the expected structure
+            if not isinstance(metadata, dict):
+                metadata = {}
+            if "measures" not in metadata:
+                metadata["measures"] = {}
+            if "dimensions" not in metadata:
+                metadata["dimensions"] = {}
+            if "data_types" not in metadata:
+                metadata["data_types"] = {}
+            
+            # Ensure summary is a dict
+            if not isinstance(summary, dict):
+                summary = {}
+                
+            # Ensure data is a list
+            if not isinstance(data, list):
+                data = []
             
             validation_info = query_result.get("validation_info", {})
             
@@ -917,7 +1393,39 @@ class AnalyzeDataPointTool(BaseTool):
             
         except Exception as e:
             logger.error(f"Error analyzing data point: {e}")
-            return {"error": str(e)}
+            
+            # Get relevant knowledge for analysis errors using Golett knowledge system
+            error_context = f"data analysis error: {str(e)}"
+            knowledge_fallback = get_cubejs_knowledge_fallback(error_context, self.memory_manager)
+            
+            # Parse the error for actionable feedback
+            error_message = str(e)
+            actionable_feedback = f"DATA ANALYSIS ERROR: {error_message}"
+            
+            # Add specific guidance based on error type
+            if "data" in error_message.lower():
+                actionable_feedback += "\n\nDATA FORMAT ERROR: Check that query_result contains valid data from ExecuteCubeQuery."
+            elif "key" in error_message.lower() or "attribute" in error_message.lower():
+                actionable_feedback += "\n\nDATA STRUCTURE ERROR: The query result may be missing expected fields."
+            elif "metadata" in error_message.lower():
+                actionable_feedback += "\n\nMETADATA ERROR: The query result is missing metadata structure. This may be due to an incomplete ExecuteCubeQuery result."
+            
+            # Combine with knowledge fallback
+            if knowledge_fallback:
+                actionable_feedback += f"\n\n**CubeJS Knowledge Reference:**\n{knowledge_fallback}"
+            
+            return {
+                "error": error_message,
+                "actionable_feedback": actionable_feedback,
+                "status": "analysis_failed",
+                "retry_suggestions": [
+                    "Ensure query_result is from a successful ExecuteCubeQuery",
+                    "Check that the query returned data (not empty result)",
+                    "Verify the analysis_type is valid: 'summary', 'trend', 'comparison', or 'detailed'",
+                    "Try with a simpler analysis_type like 'summary'",
+                    "Check that ExecuteCubeQuery completed successfully with processed_data"
+                ]
+            }
     
     def _generate_enhanced_summary_insights(self, data: List[Dict], summary: Dict, metadata: Dict) -> List[str]:
         """Generate enhanced summary insights from processed data"""

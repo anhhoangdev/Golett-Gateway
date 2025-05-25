@@ -1,0 +1,20 @@
+[
+  {
+    "timestamp": "2025-05-25T23:48:06.354766",
+    "question": "Test local question",
+    "answer": "Test local answer",
+    "query_used": null,
+    "data_retrieved": null,
+    "session_id": "backend_test_local",
+    "turn_id": "backend_test_local_0"
+  },
+  {
+    "timestamp": "2025-05-25T23:50:43.108269",
+    "question": "Test local question",
+    "answer": "Test local answer",
+    "query_used": null,
+    "data_retrieved": null,
+    "session_id": "backend_test_local",
+    "turn_id": "backend_test_local_1"
+  }
+]

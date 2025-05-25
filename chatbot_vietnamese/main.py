@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Vietnamese CubeJS Chatbot - Interactive Chat Interface
-
-An Ollama-style interactive Vietnamese chatbot for business intelligence queries.
+Vietnamese CubeJS Chatbot - Interactive Chat Interface with Memory
+Enhanced Ollama-style conversation with memory capabilities
 """
 
 import os
@@ -11,7 +10,7 @@ import time
 import json
 import uuid
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from pathlib import Path
 
 # Add the parent directory to the path so we can import golett
@@ -36,7 +35,11 @@ class ChatSessionManager:
             
         try:
             print("🔄 Đang khởi tạo chatbot...")
-            self.chatbot = VietnameseCubeJSChatbot()
+            # Initialize with default CubeJS configuration
+            self.chatbot = VietnameseCubeJSChatbot(
+                cubejs_api_url="http://localhost:4000",
+                cubejs_api_token=None
+            )
             print("✅ Chatbot đã sẵn sàng!")
             return True
         except Exception as e:
@@ -506,6 +509,12 @@ def demo_mode():
     print(f"\n✅ Demo hoàn thành!")
 
 
+def main():
+    """Main entry point"""
+    chat = VietnameseInteractiveChat()
+    chat.run()
+
+
 if __name__ == "__main__":
     import argparse
     
@@ -527,4 +536,4 @@ Examples:
     if args.demo:
         demo_mode()
     else:
-        interactive_chat() 
+        main() 
