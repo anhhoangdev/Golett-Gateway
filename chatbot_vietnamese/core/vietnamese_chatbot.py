@@ -350,13 +350,13 @@ class VietnameseCubeJSChatbot:
     
     def ask(self, question: str) -> str:
         """
-        Ask a question with proper Golett memory integration
+        Ask a question with intelligent conversation flow and proper Golett memory integration
         
         Args:
             question: Vietnamese business question
             
         Returns:
-            Answer with Golett memory-enhanced context
+            Answer with appropriate conversation flow and Golett memory-enhanced context
         """
         try:
             print(f"🤔 Processing question: {question}")
@@ -374,28 +374,25 @@ class VietnameseCubeJSChatbot:
                 memory_layer=MemoryLayer.IN_SESSION
             )
             
+            # Determine conversation flow type
+            conversation_type = self._determine_conversation_type(question)
+            print(f"🔍 Conversation type detected: {conversation_type}")
+            
             # Get conversation context from Golett memory
             conversation_context = self._get_conversation_context(question)
             
-            # Get relevant business intelligence context
-            bi_context = self._get_bi_context(question)
-            
-            # Get relevant CubeJS knowledge for this specific question
-            relevant_knowledge = self._get_cubejs_knowledge_context(question)
-            
-            # Create enhanced task with Golett memory context
-            task = self._create_memory_enhanced_task(question, conversation_context, bi_context, relevant_knowledge)
-            
-            # Create crew and execute
-            crew = Crew(
-                agents=[self.agent],
-                tasks=[task],
-                verbose=True
-            )
-            
-            # Execute the task
-            result = crew.kickoff()
-            answer = str(result)
+            # Route to appropriate handler based on conversation type
+            if conversation_type == "data_analysis":
+                answer = self._handle_data_analysis_question(question, conversation_context)
+            elif conversation_type == "follow_up":
+                answer = self._handle_follow_up_question(question, conversation_context)
+            elif conversation_type == "conversational":
+                answer = self._handle_conversational_question(question, conversation_context)
+            elif conversation_type == "clarification":
+                answer = self._handle_clarification_question(question, conversation_context)
+            else:
+                # Default to conversational for unknown types
+                answer = self._handle_conversational_question(question, conversation_context)
             
             # Store the assistant response in Golett memory
             self.memory_manager.store_message(
@@ -406,13 +403,15 @@ class VietnameseCubeJSChatbot:
                     "language": "vietnamese",
                     "domain": "business_intelligence",
                     "timestamp": datetime.now().isoformat(),
-                    "question": question
+                    "question": question,
+                    "conversation_type": conversation_type
                 },
                 memory_layer=MemoryLayer.IN_SESSION
             )
             
-            # Extract and store business insights
-            self._extract_and_store_insights(question, answer)
+            # Extract and store business insights (only for data analysis)
+            if conversation_type == "data_analysis":
+                self._extract_and_store_insights(question, answer)
             
             # Store conversation context
             self._store_conversation_context(question, answer)
@@ -437,6 +436,329 @@ class VietnameseCubeJSChatbot:
             )
             
             return error_msg
+    
+    def _determine_conversation_type(self, question: str) -> str:
+        """
+        Use an intelligent agent to determine the type of conversation flow needed
+        
+        Args:
+            question: User's question in Vietnamese
+            
+        Returns:
+            Conversation type: 'data_analysis', 'follow_up', 'conversational', 'clarification'
+        """
+        try:
+            # Get recent conversation context for better classification
+            recent_context = self._get_conversation_context(question)
+            
+            # Create a conversation classifier agent
+            classifier_agent = Agent(
+                role="Vietnamese Conversation Flow Classifier",
+                goal="Classify Vietnamese questions to determine the appropriate conversation flow",
+                backstory="""You are an expert Vietnamese language classifier specialized in business intelligence conversations. 
+                You excel at understanding the intent behind Vietnamese questions and determining whether they need:
+                - Data analysis (requires CubeJS tools)
+                - Follow-up responses (building on previous conversation)
+                - Conversational responses (greetings, thanks, general chat)
+                - Clarification/explanation (asking for understanding)
+                
+                You understand Vietnamese business terminology and can detect when users are asking for specific data vs general conversation.""",
+                verbose=False,  # Keep quiet for classification
+                allow_delegation=False,
+                tools=[]  # No tools needed for classification
+            )
+            
+            # Create classification task
+            classification_task = Task(
+                description=f"""
+Classify this Vietnamese question to determine the conversation flow type: "{question}"
+
+RECENT CONVERSATION CONTEXT:
+{recent_context}
+
+CLASSIFICATION RULES:
+
+1. **data_analysis** - Choose this if the question:
+   - Asks for specific numbers, metrics, or statistics (bao nhiêu, số lượng, tổng, trung bình)
+   - Requests business data (doanh thu, bán hàng, lợi nhuận, chi phí, khách hàng)
+   - Asks for comparisons or trends (so sánh, tăng, giảm, xu hướng)
+   - Requests reports or analysis (phân tích, báo cáo, thống kê)
+   - Mentions time periods (tháng này, năm trước, quý)
+   - Asks about performance metrics (hiệu suất, năng suất)
+
+2. **follow_up** - Choose this if the question:
+   - Is short and references previous conversation (còn, thêm, nữa, tiếp)
+   - Builds on previous analysis (chi tiết hơn, cụ thể hơn)
+   - References previous results (về cái đó, về điều này, về kết quả)
+   - Asks for additional related information
+
+3. **clarification** - Choose this if the question:
+   - Asks for explanation (tại sao, vì sao, làm thế nào, nghĩa là gì)
+   - Requests understanding (giải thích, ý nghĩa, nguyên nhân)
+   - Seeks definition or meaning (định nghĩa, có nghĩa)
+
+4. **conversational** - Choose this if the question:
+   - Is a greeting (xin chào, chào, hello, hi)
+   - Is thanks or acknowledgment (cảm ơn, thank you, ok, được)
+   - Asks about capabilities (bạn có thể, giúp tôi, hướng dẫn)
+   - Is general chat or very short responses
+
+INSTRUCTIONS:
+1. Analyze the question content and intent
+2. Consider the conversation context if relevant
+3. Choose the MOST APPROPRIATE single classification
+4. Respond with ONLY the classification type: data_analysis, follow_up, conversational, or clarification
+5. Do NOT provide explanation, just the classification
+
+RESPOND WITH ONLY ONE WORD: data_analysis, follow_up, conversational, or clarification
+""",
+                agent=classifier_agent,
+                expected_output="Single word classification: data_analysis, follow_up, conversational, or clarification"
+            )
+            
+            # Create crew and execute classification
+            classification_crew = Crew(
+                agents=[classifier_agent],
+                tasks=[classification_task],
+                verbose=False  # Keep quiet for classification
+            )
+            
+            # Execute classification
+            result = classification_crew.kickoff()
+            classification = str(result).strip().lower()
+            
+            # Validate and clean the result
+            valid_types = ["data_analysis", "follow_up", "conversational", "clarification"]
+            
+            # Extract the classification from the result
+            for valid_type in valid_types:
+                if valid_type in classification:
+                    return valid_type
+            
+            # Default fallback logic if agent classification fails
+            question_lower = question.lower().strip()
+            
+            # Quick fallback checks
+            if any(word in question_lower for word in ["bao nhiêu", "số lượng", "doanh thu", "phân tích", "thống kê"]):
+                return "data_analysis"
+            elif any(word in question_lower for word in ["tại sao", "vì sao", "giải thích", "nghĩa là gì"]):
+                return "clarification"
+            elif any(word in question_lower for word in ["xin chào", "cảm ơn", "hello", "hi"]):
+                return "conversational"
+            elif len(question_lower) < 30:
+                return "follow_up"
+            else:
+                return "conversational"
+                
+        except Exception as e:
+            logger.warning(f"Error in agent-based conversation classification: {e}")
+            
+            # Fallback to simple keyword detection if agent fails
+            question_lower = question.lower().strip()
+            
+            if any(word in question_lower for word in ["bao nhiêu", "số lượng", "doanh thu", "phân tích", "thống kê", "tổng", "trung bình"]):
+                return "data_analysis"
+            elif any(word in question_lower for word in ["tại sao", "vì sao", "giải thích", "nghĩa là gì", "làm thế nào"]):
+                return "clarification"
+            elif any(word in question_lower for word in ["xin chào", "cảm ơn", "hello", "hi", "bạn là ai"]):
+                return "conversational"
+            elif len(question_lower) < 30:
+                return "follow_up"
+            else:
+                return "conversational"
+
+    def _handle_data_analysis_question(self, question: str, conversation_context: str) -> str:
+        """Handle questions that require data analysis with CubeJS tools"""
+        try:
+            print("📊 Handling data analysis question...")
+            
+            # Get relevant business intelligence context
+            bi_context = self._get_bi_context(question)
+            
+            # Get relevant CubeJS knowledge for this specific question
+            relevant_knowledge = self._get_cubejs_knowledge_context(question)
+            
+            # Create enhanced task with Golett memory context
+            task = self._create_memory_enhanced_task(question, conversation_context, bi_context, relevant_knowledge)
+            
+            # Create crew and execute
+            crew = Crew(
+                agents=[self.agent],
+                tasks=[task],
+                verbose=True
+            )
+            
+            # Execute the task
+            result = crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in data analysis: {e}")
+            return f"❌ Lỗi khi phân tích dữ liệu: {str(e)}"
+
+    def _handle_follow_up_question(self, question: str, conversation_context: str) -> str:
+        """Handle follow-up questions that build on previous conversation"""
+        try:
+            print("🔄 Handling follow-up question...")
+            
+            # Create a simpler conversational agent for follow-ups
+            follow_up_agent = Agent(
+                role="Vietnamese Business Assistant",
+                goal="Answer follow-up questions based on previous conversation context",
+                backstory="""You are a helpful Vietnamese business assistant. You excel at understanding 
+                follow-up questions and providing relevant answers based on previous conversation context.
+                You can reference previous data analysis results and provide additional insights.""",
+                verbose=True,
+                allow_delegation=False,
+                tools=[]  # No tools needed for follow-ups
+            )
+            
+            # Create follow-up task
+            task = Task(
+                description=f"""
+Answer this Vietnamese follow-up question: "{question}"
+
+PREVIOUS CONVERSATION CONTEXT:
+{conversation_context}
+
+INSTRUCTIONS:
+1. Understand the follow-up question in relation to previous conversation
+2. Provide a helpful answer in Vietnamese
+3. Reference previous data or analysis if relevant
+4. If the follow-up requires new data analysis, suggest asking a more specific question
+5. Be conversational and helpful
+
+Answer in Vietnamese.
+""",
+                agent=follow_up_agent,
+                expected_output="A helpful Vietnamese response to the follow-up question"
+            )
+            
+            # Create crew and execute
+            crew = Crew(
+                agents=[follow_up_agent],
+                tasks=[task],
+                verbose=True
+            )
+            
+            result = crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in follow-up handling: {e}")
+            return f"❌ Lỗi khi xử lý câu hỏi tiếp theo: {str(e)}"
+
+    def _handle_conversational_question(self, question: str, conversation_context: str) -> str:
+        """Handle general conversational questions"""
+        try:
+            print("💬 Handling conversational question...")
+            
+            # Create a conversational agent
+            conversational_agent = Agent(
+                role="Vietnamese Business Chatbot",
+                goal="Engage in helpful conversation and provide guidance about business intelligence",
+                backstory="""You are a friendly Vietnamese business intelligence chatbot. You help users 
+                understand business data analysis, explain concepts, and guide them on how to ask 
+                effective questions about their business data.""",
+                verbose=True,
+                allow_delegation=False,
+                tools=[]  # No tools needed for conversation
+            )
+            
+            # Create conversational task
+            task = Task(
+                description=f"""
+Respond to this Vietnamese conversational question: "{question}"
+
+CONVERSATION CONTEXT:
+{conversation_context}
+
+INSTRUCTIONS:
+1. Be friendly and helpful in Vietnamese
+2. If it's a greeting, respond warmly
+3. If it's a question about capabilities, explain what you can do
+4. If it's a thank you, acknowledge gracefully
+5. If it's about business intelligence, provide helpful guidance
+6. Encourage users to ask specific business questions for data analysis
+
+CAPABILITIES TO MENTION (if relevant):
+- Analyze business data (doanh thu, bán hàng, tài chính, sản xuất, nhân sự)
+- Create reports and insights
+- Answer questions about trends, comparisons, and performance
+- Help with Vietnamese business intelligence queries
+
+Answer in Vietnamese with a friendly, professional tone.
+""",
+                agent=conversational_agent,
+                expected_output="A friendly Vietnamese conversational response"
+            )
+            
+            # Create crew and execute
+            crew = Crew(
+                agents=[conversational_agent],
+                tasks=[task],
+                verbose=True
+            )
+            
+            result = crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in conversational handling: {e}")
+            return f"❌ Lỗi khi trò chuyện: {str(e)}"
+
+    def _handle_clarification_question(self, question: str, conversation_context: str) -> str:
+        """Handle questions asking for clarification or explanation"""
+        try:
+            print("❓ Handling clarification question...")
+            
+            # Create an explanation agent
+            explanation_agent = Agent(
+                role="Vietnamese Business Analyst Explainer",
+                goal="Provide clear explanations and clarifications about business concepts and data",
+                backstory="""You are an expert Vietnamese business analyst who excels at explaining 
+                complex business concepts, data analysis results, and business intelligence insights 
+                in simple, understandable terms.""",
+                verbose=True,
+                allow_delegation=False,
+                tools=[]  # No tools needed for explanations
+            )
+            
+            # Create explanation task
+            task = Task(
+                description=f"""
+Provide a clear explanation for this Vietnamese question: "{question}"
+
+CONVERSATION CONTEXT:
+{conversation_context}
+
+INSTRUCTIONS:
+1. Understand what the user is asking for clarification about
+2. Provide a clear, detailed explanation in Vietnamese
+3. Use simple language and examples when possible
+4. If it's about previous data analysis, explain the results clearly
+5. If it's about business concepts, provide educational content
+6. Be thorough but easy to understand
+
+Answer in Vietnamese with clear explanations.
+""",
+                agent=explanation_agent,
+                expected_output="A clear Vietnamese explanation answering the clarification question"
+            )
+            
+            # Create crew and execute
+            crew = Crew(
+                agents=[explanation_agent],
+                tasks=[task],
+                verbose=True
+            )
+            
+            result = crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in clarification handling: {e}")
+            return f"❌ Lỗi khi giải thích: {str(e)}"
     
     def _get_conversation_context(self, question: str) -> str:
         """Get conversation context from Golett memory"""
