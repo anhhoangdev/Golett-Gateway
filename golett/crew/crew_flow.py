@@ -1,12 +1,8 @@
 from typing import Any, Dict, List, Optional, Tuple, Callable, Union
 import json
 from datetime import datetime
-
-from crewai import Agent, Task, Crew
-
-from golett.chat.crew_session import CrewChatSession
+from golett.crew.crew_session import CrewChatSession
 from golett.chat.flow import ChatFlowManager
-from golett.agents.bi.analyzer import BiQueryAnalyzer
 from golett.utils.logger import get_logger
 
 logger = get_logger(__name__)

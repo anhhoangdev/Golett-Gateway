@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Refactored Vietnamese Business Intelligence Chatbot with Proper Golett Core Integration
+Refactored Vietnamese Business Intelligence Chatbot with Crew and Enhanced Context Manager
 
-This refactored version properly leverages Golett's core capabilities:
-- ContextManager for intelligent context retrieval
-- Advanced BI context and knowledge integration
-- Clean separation of agents and tasks
-- Enhanced cross-session learning
+This refactored version uses Golett's latest capabilities:
+- CrewChatSession and CrewChatFlowManager for crew-based conversation management
+- EnhancedContextManager for sophisticated context retrieval
+- GolettKnowledgeAdapter for knowledge management
+- Clean, modern architecture using Golett's crew system
+- Proper separation of agents and tasks into dedicated modules
 """
 
 import os
@@ -18,39 +19,49 @@ from datetime import datetime
 # Add the parent directory to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from crewai import Crew, Process
+from crewai import Agent, Task, Crew, Process
 
-# Proper Golett imports
+# Golett core imports - updated to use crew system
 from golett.memory.memory_manager import MemoryManager, MemoryLayer
 from golett.memory.session.session_manager import SessionManager
-from golett.memory.contextual.context_manager import ContextManager
+from golett.memory.contextual.enhanced_context_manager import EnhancedContextManager, ContextRetrievalStrategy
+from golett.crew.crew_session import CrewChatSession
+from golett.crew.crew_flow import CrewChatFlowManager
+from golett.crew.crew import GolettKnowledgeAdapter
 from golett.knowledge.sources import GolettAdvancedTextFileKnowledgeSource, KnowledgeRetrievalStrategy
 from golett.utils.logger import get_logger
 
-# Local imports - using the new modular structure
-from chatbot_vietnamese.agents import (
+# Local imports - using proper agent and task modules
+from chatbot_vietnamese.utils.dynamic_schema_mapper import DynamicCubeJSSchemaMapper
+from chatbot_vietnamese.agents.vietnamese_bi_agents import (
     VietnameseDataAnalystAgent,
     VietnameseConversationClassifierAgent,
     VietnameseFollowUpAgent,
     VietnameseConversationalAgent,
     VietnameseExplanationAgent
 )
-from chatbot_vietnamese.tasks import VietnameseTaskFactory
-from chatbot_vietnamese.utils.dynamic_schema_mapper import DynamicCubeJSSchemaMapper
+from chatbot_vietnamese.tasks.vietnamese_bi_tasks import VietnameseTaskFactory
 
 logger = get_logger(__name__)
 
 
 class RefactoredVietnameseCubeJSChatbot:
     """
-    Refactored Vietnamese Business Intelligence Chatbot with proper Golett core integration
+    Refactored Vietnamese Business Intelligence Chatbot using Proper Agent and Task Classes
     
-    Key improvements:
-    - Proper use of Golett's ContextManager for intelligent context retrieval
-    - Clean separation of agents and tasks
-    - Enhanced business intelligence context management
-    - Cross-session knowledge access
-    - Modular, maintainable architecture
+    This implementation now uses:
+    - Proper agent classes from vietnamese_bi_agents.py module
+    - Task factory from vietnamese_bi_tasks.py module
+    - EnhancedContextManager for sophisticated context retrieval
+    - GolettKnowledgeAdapter for knowledge management
+    - Clean separation of concerns with dedicated agent and task modules
+    
+    Key improvements over the old version:
+    - Uses proper agent classes instead of hardcoded agent definitions
+    - Uses task factory for creating tasks with proper Golett integration
+    - Enhanced context manager for better memory retrieval
+    - Simplified architecture with better separation of concerns
+    - Proper conversation flow based on question classification
     """
     
     def __init__(
@@ -60,10 +71,10 @@ class RefactoredVietnameseCubeJSChatbot:
         postgres_connection: str = None,
         qdrant_url: str = "http://localhost:6333",
         cubejs_api_url: str = "http://localhost:4000",
-        cubejs_api_token: str = None
+        cubejs_api_token: str = None,
     ):
         """
-        Initialize Refactored Vietnamese CubeJS Chatbot with proper Golett integration
+        Initialize Refactored Vietnamese CubeJS Chatbot with Crew System
         
         Args:
             session_id: Session identifier for memory management
@@ -87,8 +98,8 @@ class RefactoredVietnameseCubeJSChatbot:
                 "Set POSTGRES_CONNECTION environment variable or pass postgres_connection parameter."
             )
         
-        # Initialize Golett core system
-        logger.info("🔧 Initializing Golett core system...")
+        # Initialize Golett core system with crew support
+        logger.info("🔧 Initializing Golett core system with crew support...")
         self._initialize_golett_core(postgres_connection, qdrant_url)
         
         # Initialize session
@@ -99,19 +110,12 @@ class RefactoredVietnameseCubeJSChatbot:
         self.schema_mapper.refresh_schema()
         
         # Initialize knowledge sources
-        self.knowledge_sources = self._initialize_knowledge_sources()
+        self._initialize_knowledge_sources()
         
-        # Initialize agents with proper Golett integration
-        self._initialize_agents()
+        # Initialize crew session and flow manager
+        self._initialize_crew_system()
         
-        # Initialize task factory
-        self.task_factory = VietnameseTaskFactory(
-            memory_manager=self.memory_manager,
-            context_manager=self.context_manager,
-            session_id=self.session_id
-        )
-        
-        logger.info(f"✅ Refactored Vietnamese CubeJS Chatbot initialized (session: {self.session_id})")
+        logger.info(f"✅ Refactored Vietnamese CubeJS Chatbot with Crew System initialized (session: {self.session_id})")
     
     def _initialize_golett_core(self, postgres_connection: str, qdrant_url: str):
         """Initialize Golett's core memory and context management system"""
@@ -120,18 +124,18 @@ class RefactoredVietnameseCubeJSChatbot:
         self.memory_manager = MemoryManager(
             postgres_connection=postgres_connection,
             qdrant_url=qdrant_url,
-            postgres_base_table="vietnamese_chatbot_memories",
-            qdrant_base_collection="vietnamese_chatbot_vectors",
+            postgres_base_table="vietnamese_chatbot_refactored_crew",
+            qdrant_base_collection="vietnamese_chatbot_refactored_crew_vectors",
             enable_normalized_layers=True
         )
         
         # Initialize session manager
         self.session_manager = SessionManager(self.memory_manager)
         
-        # Initialize context manager - this is the key improvement!
-        self.context_manager = ContextManager(self.memory_manager)
+        # Initialize enhanced context manager - key improvement!
+        self.enhanced_context_manager = EnhancedContextManager(self.memory_manager)
         
-        logger.info("✅ Golett core system initialized")
+        logger.info("✅ Golett core system with enhanced context manager initialized")
     
     def _initialize_session(self, session_id: str = None):
         """Initialize or create session with proper metadata"""
@@ -144,30 +148,40 @@ class RefactoredVietnameseCubeJSChatbot:
                 logger.info(f"Creating new session with ID: {session_id}")
                 self.session_manager.create_session(
                     user_id=self.user_id,
-                    session_type="vietnamese_bi_refactored",
+                    session_type="vietnamese_bi_refactored_agent_classes",
                     metadata={
                         "session_id": session_id,
-                        "version": "refactored",
-                        "architecture": "modular"
+                        "version": "refactored_agent_classes",
+                        "architecture": "agent_task_classes"
                     }
                 )
         else:
             # Create new session
             self.session_id = self.session_manager.create_session(
                 user_id=self.user_id,
-                session_type="vietnamese_bi_refactored",
+                session_type="vietnamese_bi_refactored_agent_classes",
                 preferences={
                     "language": "vietnamese", 
                     "domain": "business_intelligence",
-                    "version": "refactored"
+                    "version": "refactored_agent_classes",
+                    "architecture": "agent_task_classes"
                 }
             )
         
         logger.info(f"✅ Session initialized: {self.session_id}")
     
-    def _initialize_knowledge_sources(self) -> Dict[str, Any]:
+    def _initialize_knowledge_sources(self):
         """Initialize CubeJS knowledge sources using Golett's knowledge system"""
-        knowledge_sources = {}
+        
+        # Initialize knowledge adapter
+        self.knowledge_adapter = GolettKnowledgeAdapter(
+            memory_manager=self.memory_manager,
+            session_id=self.session_id,
+            enable_advanced_features=True,
+            default_memory_layer=MemoryLayer.LONG_TERM,
+            cross_session_access=True,
+            max_knowledge_age_days=30
+        )
         
         try:
             # Get the knowledge directory path
@@ -178,105 +192,651 @@ class RefactoredVietnameseCubeJSChatbot:
             # Initialize REST API knowledge source
             rest_api_path = os.path.join(knowledge_dir, "rest_api.md")
             if os.path.exists(rest_api_path):
-                rest_api_source = GolettAdvancedTextFileKnowledgeSource(
+                rest_api_source = self.knowledge_adapter.add_advanced_file_source(
                     file_path=rest_api_path,
-                    memory_manager=self.memory_manager,
-                    session_id=self.session_id,
-                    collection_name="cubejs_rest_api_refactored",
+                    collection_name="cubejs_rest_api_refactored_agent_classes",
                     memory_layer=MemoryLayer.LONG_TERM,
-                    tags=["cubejs", "rest_api", "query_format", "vietnamese_chatbot", "refactored"],
+                    tags=["cubejs", "rest_api", "query_format", "vietnamese_refactored_agent_classes"],
                     importance=0.9,
                     chunk_size=800,
                     overlap_size=100
                 )
-                
-                rest_api_chunks = rest_api_source.add()
-                knowledge_sources["rest_api"] = {
-                    "source": rest_api_source,
-                    "chunks": len(rest_api_chunks)
-                }
-                logger.info(f"✅ Loaded CubeJS REST API knowledge: {len(rest_api_chunks)} chunks")
+                logger.info(f"✅ Loaded CubeJS REST API knowledge")
             
             # Initialize schemas knowledge source
             schemas_path = os.path.join(knowledge_dir, "schemas.md")
             if os.path.exists(schemas_path):
-                schemas_source = GolettAdvancedTextFileKnowledgeSource(
+                schemas_source = self.knowledge_adapter.add_advanced_file_source(
                     file_path=schemas_path,
-                    memory_manager=self.memory_manager,
-                    session_id=self.session_id,
-                    collection_name="cubejs_schemas_refactored",
+                    collection_name="cubejs_schemas_refactored_agent_classes",
                     memory_layer=MemoryLayer.LONG_TERM,
-                    tags=["cubejs", "schemas", "data_modeling", "vietnamese_chatbot", "refactored"],
+                    tags=["cubejs", "schemas", "data_model", "vietnamese_refactored_agent_classes"],
                     importance=0.9,
                     chunk_size=800,
                     overlap_size=100
                 )
-                
-                schemas_chunks = schemas_source.add()
-                knowledge_sources["schemas"] = {
-                    "source": schemas_source,
-                    "chunks": len(schemas_chunks)
-                }
-                logger.info(f"✅ Loaded CubeJS Schemas knowledge: {len(schemas_chunks)} chunks")
+                logger.info(f"✅ Loaded CubeJS schemas knowledge")
             
-            if not knowledge_sources:
-                logger.warning("⚠️ No CubeJS knowledge files found in knowledge/cubejs directory")
+            # Add memory-based knowledge source for conversation history
+            memory_source = self.knowledge_adapter.add_advanced_memory_source(
+                collection_names=["cubejs_rest_api_refactored_agent_classes", "cubejs_schemas_refactored_agent_classes"],
+                memory_layers=[MemoryLayer.LONG_TERM, MemoryLayer.SHORT_TERM],
+                context_types=["conversation", "insight", "data_analysis"],
+                tags=["vietnamese_refactored_agent_classes", "cubejs"],
+                importance_threshold=0.3,
+                cross_session=True,
+                max_age_days=30
+            )
+            logger.info(f"✅ Added memory-based knowledge source")
             
         except Exception as e:
-            logger.error(f"❌ Error initializing CubeJS knowledge sources: {e}")
-            knowledge_sources = {}
-        
-        return knowledge_sources
+            logger.warning(f"Error initializing knowledge sources: {e}")
     
-    def _initialize_agents(self):
-        """Initialize all agents with proper Golett integration"""
+    def _initialize_crew_system(self):
+        """Initialize crew session and flow manager using proper agent and task classes"""
+        
+        # Create crew session
+        self.crew_session = CrewChatSession(
+            session_id=self.session_id,
+            memory_manager=self.memory_manager,
+            knowledge_adapter=self.knowledge_adapter
+        )
+        
+        # Initialize agent classes with proper Golett integration
+        self._initialize_agent_classes()
+        
+        # Initialize task factory
+        self._initialize_task_factory()
+        
+        # Create specialized Vietnamese BI crews using agent classes
+        self._create_vietnamese_crews_from_classes()
+        
+        # Create crew flow manager
+        self.flow_manager = CrewChatFlowManager(
+            session=self.crew_session,
+            use_crew_for_complex=True,
+            auto_summarize=True,
+            messages_per_summary=8
+        )
+        
+        logger.info("✅ Crew system initialized with Vietnamese BI agent classes")
+    
+    def _initialize_agent_classes(self):
+        """Initialize Vietnamese BI agent classes with proper Golett integration"""
+        
+        # Get context for agents
+        schema_context = self._generate_schema_context()
+        knowledge_context = self._get_cubejs_context("CubeJS knowledge")
+        
+        # Initialize context manager for agents
+        from golett.memory.contextual.context_manager import ContextManager
+        context_manager = ContextManager(self.memory_manager)
+        
+        # 1. Data Analyst Agent
+        self.data_analyst_agent_class = VietnameseDataAnalystAgent(
+            memory_manager=self.memory_manager,
+            context_manager=context_manager,
+            session_id=self.session_id,
+            cubejs_api_url=self.cubejs_api_url,
+            cubejs_api_token=self.cubejs_api_token,
+            schema_context=schema_context,
+            knowledge_context=knowledge_context
+        )
+        
+        # 2. Conversation Classifier Agent
+        self.classifier_agent_class = VietnameseConversationClassifierAgent(
+            memory_manager=self.memory_manager,
+            session_id=self.session_id
+        )
+        
+        # 3. Follow-up Agent
+        self.follow_up_agent_class = VietnameseFollowUpAgent(
+            memory_manager=self.memory_manager,
+            context_manager=context_manager,
+            session_id=self.session_id
+        )
+        
+        # 4. Conversational Agent
+        self.conversational_agent_class = VietnameseConversationalAgent(
+            memory_manager=self.memory_manager,
+            session_id=self.session_id
+        )
+        
+        # 5. Explanation Agent
+        self.explanation_agent_class = VietnameseExplanationAgent(
+            memory_manager=self.memory_manager,
+            context_manager=context_manager,
+            session_id=self.session_id
+        )
+        
+        logger.info("✅ Vietnamese BI agent classes initialized")
+    
+    def _initialize_task_factory(self):
+        """Initialize task factory with Golett integration"""
+        
+        from golett.memory.contextual.context_manager import ContextManager
+        context_manager = ContextManager(self.memory_manager)
+        
+        self.task_factory = VietnameseTaskFactory(
+            memory_manager=self.memory_manager,
+            context_manager=context_manager,
+            session_id=self.session_id
+        )
+        
+        logger.info("✅ Vietnamese task factory initialized")
+    
+    def _create_vietnamese_crews_from_classes(self):
+        """Create specialized crews using proper agent classes"""
+        
+        # 1. Vietnamese Data Analysis Crew
+        self.crew_session.create_crew(
+            crew_id="vietnamese_data_analysis",
+            crew_name="Vietnamese Data Analysis Team",
+            agents=[
+                self.data_analyst_agent_class.agent,
+                # Could add query specialist here if needed
+            ],
+            process="sequential"
+        )
+        
+        # 2. Vietnamese Conversation Management Crew
+        self.crew_session.create_crew(
+            crew_id="vietnamese_conversation",
+            crew_name="Vietnamese Conversation Team",
+            agents=[
+                self.classifier_agent_class.agent,
+                self.conversational_agent_class.agent,
+                self.follow_up_agent_class.agent
+            ],
+            process="sequential"
+        )
+        
+        # 3. Vietnamese Knowledge and Explanation Crew
+        self.crew_session.create_crew(
+            crew_id="vietnamese_knowledge",
+            crew_name="Vietnamese Knowledge Team",
+            agents=[
+                self.explanation_agent_class.agent
+            ],
+            process="sequential"
+        )
+        
+        logger.info("✅ Created specialized Vietnamese BI crews from agent classes")
+    
+    def _get_llm_config(self):
+        """Get LLM configuration for agents"""
+        # This would return the appropriate LLM configuration
+        # For now, return None to use default
+        return None
+
+    def ask(self, question: str) -> str:
+        """
+        Ask a question using the proper agent classes and task factory
+        
+        Args:
+            question: Vietnamese business question
+            
+        Returns:
+            Answer with proper agent-based processing and enhanced Golett context
+        """
         try:
-            # Generate schema and knowledge context
-            schema_context = self._generate_schema_context()
-            knowledge_context = self._get_cubejs_knowledge_context("CubeJS query format time dimensions filters")
+            print(f"🤔 Processing question with agent classes and task factory: {question}")
             
-            # Initialize data analyst agent with enhanced Golett integration
-            self.data_analyst_agent = VietnameseDataAnalystAgent(
-                memory_manager=self.memory_manager,
-                context_manager=self.context_manager,
-                session_id=self.session_id,
-                cubejs_api_url=self.cubejs_api_url,
-                cubejs_api_token=self.cubejs_api_token,
-                schema_context=schema_context,
-                knowledge_context=knowledge_context
-            )
+            # Get enhanced context using the enhanced context manager
+            enhanced_context = self._get_enhanced_context(question)
             
-            # Initialize conversation classifier agent
-            self.classifier_agent = VietnameseConversationClassifierAgent(
-                memory_manager=self.memory_manager,
-                session_id=self.session_id
-            )
+            # Step 1: Classify the conversation type using the classifier agent
+            conversation_type = self._classify_question_with_agent(question)
+            print(f"📋 Conversation type classified as: {conversation_type}")
             
-            # Initialize follow-up agent
-            self.follow_up_agent = VietnameseFollowUpAgent(
-                memory_manager=self.memory_manager,
-                context_manager=self.context_manager,
-                session_id=self.session_id
-            )
+            # Step 2: Process based on conversation type using appropriate agents and tasks
+            response = self._process_by_conversation_type(question, conversation_type, enhanced_context)
             
-            # Initialize conversational agent
-            self.conversational_agent = VietnameseConversationalAgent(
-                memory_manager=self.memory_manager,
-                session_id=self.session_id
-            )
+            # Store the conversation with enhanced metadata
+            self._store_conversation_with_metadata(question, response, enhanced_context)
             
-            # Initialize explanation agent
-            self.explanation_agent = VietnameseExplanationAgent(
-                memory_manager=self.memory_manager,
-                context_manager=self.context_manager,
-                session_id=self.session_id
-            )
-            
-            logger.info("✅ All Vietnamese BI agents initialized with Golett integration")
+            logger.info("✅ Question processed successfully with agent classes")
+            return response
             
         except Exception as e:
-            logger.error(f"❌ Error initializing agents: {e}")
-            raise
+            error_msg = f"❌ Lỗi khi xử lý câu hỏi: {str(e)}"
+            print(error_msg)
+            
+            # Store error in memory for learning
+            self.memory_manager.store_message(
+                session_id=self.session_id,
+                role="system",
+                content=f"Error: {error_msg}",
+                metadata={
+                    "type": "error",
+                    "question": question,
+                    "timestamp": datetime.now().isoformat(),
+                    "version": "refactored_crew_agent_classes"
+                },
+                memory_layer=MemoryLayer.IN_SESSION
+            )
+            
+            return error_msg
+    
+    def _classify_question_with_agent(self, question: str) -> str:
+        """Classify question using the conversation classifier agent"""
+        try:
+            # Create classification task using task factory
+            classification_task = self.task_factory.create_classification_task(
+                question=question,
+                agent=self.classifier_agent_class.agent
+            )
+            
+            # Execute the classification task
+            from crewai import Crew
+            classification_crew = Crew(
+                agents=[self.classifier_agent_class.agent],
+                tasks=[classification_task],
+                verbose=False
+            )
+            
+            result = classification_crew.kickoff()
+            classification = str(result).strip().lower()
+            
+            # Validate classification result
+            valid_types = ["data_analysis", "follow_up", "conversational", "clarification"]
+            if classification in valid_types:
+                return classification
+            else:
+                # Fallback classification
+                return self._classify_conversation_type(question)
+                
+        except Exception as e:
+            logger.warning(f"Error in agent classification: {e}")
+            # Fallback to rule-based classification
+            return self._classify_conversation_type(question)
+    
+    def _process_by_conversation_type(self, question: str, conversation_type: str, enhanced_context: Dict[str, Any]) -> str:
+        """Process question based on conversation type using appropriate agents and tasks"""
+        
+        try:
+            if conversation_type == "data_analysis":
+                return self._process_data_analysis(question, enhanced_context)
+            
+            elif conversation_type == "follow_up":
+                return self._process_follow_up(question, enhanced_context)
+            
+            elif conversation_type == "clarification":
+                return self._process_explanation(question, enhanced_context)
+            
+            else:  # conversational
+                return self._process_conversational(question, enhanced_context)
+                
+        except Exception as e:
+            logger.error(f"Error processing conversation type {conversation_type}: {e}")
+            # Fallback to conversational processing
+            return self._process_conversational(question, enhanced_context)
+    
+    def _process_data_analysis(self, question: str, enhanced_context: Dict[str, Any]) -> str:
+        """Process data analysis questions using the data analyst agent"""
+        try:
+            print("📊 Processing as data analysis question...")
+            
+            # Create data analysis task using task factory
+            data_analysis_task = self.task_factory.create_data_analysis_task(
+                question=question,
+                agent=self.data_analyst_agent_class.agent,
+                enhanced_context=enhanced_context
+            )
+            
+            # Execute the data analysis task
+            from crewai import Crew
+            data_analysis_crew = Crew(
+                agents=[self.data_analyst_agent_class.agent],
+                tasks=[data_analysis_task],
+                verbose=True
+            )
+            
+            result = data_analysis_crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in data analysis processing: {e}")
+            return f"❌ Lỗi khi phân tích dữ liệu: {str(e)}"
+    
+    def _process_follow_up(self, question: str, enhanced_context: Dict[str, Any]) -> str:
+        """Process follow-up questions using the follow-up agent"""
+        try:
+            print("🔄 Processing as follow-up question...")
+            
+            # Create follow-up task using task factory
+            follow_up_task = self.task_factory.create_follow_up_task(
+                question=question,
+                agent=self.follow_up_agent_class.agent,
+                enhanced_context=enhanced_context
+            )
+            
+            # Execute the follow-up task
+            from crewai import Crew
+            follow_up_crew = Crew(
+                agents=[self.follow_up_agent_class.agent],
+                tasks=[follow_up_task],
+                verbose=True
+            )
+            
+            result = follow_up_crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in follow-up processing: {e}")
+            return f"❌ Lỗi khi xử lý câu hỏi tiếp theo: {str(e)}"
+    
+    def _process_explanation(self, question: str, enhanced_context: Dict[str, Any]) -> str:
+        """Process explanation questions using the explanation agent"""
+        try:
+            print("💡 Processing as explanation question...")
+            
+            # Create explanation task using task factory
+            explanation_task = self.task_factory.create_explanation_task(
+                question=question,
+                agent=self.explanation_agent_class.agent,
+                enhanced_context=enhanced_context
+            )
+            
+            # Execute the explanation task
+            from crewai import Crew
+            explanation_crew = Crew(
+                agents=[self.explanation_agent_class.agent],
+                tasks=[explanation_task],
+                verbose=True
+            )
+            
+            result = explanation_crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in explanation processing: {e}")
+            return f"❌ Lỗi khi giải thích: {str(e)}"
+    
+    def _process_conversational(self, question: str, enhanced_context: Dict[str, Any]) -> str:
+        """Process conversational questions using the conversational agent"""
+        try:
+            print("💬 Processing as conversational question...")
+            
+            # Get conversation context
+            conversation_context = self.memory_manager.get_session_history(
+                session_id=self.session_id,
+                limit=5,
+                include_layers=[MemoryLayer.IN_SESSION, MemoryLayer.SHORT_TERM]
+            )
+            
+            # Create conversational task using task factory
+            conversational_task = self.task_factory.create_conversational_task(
+                question=question,
+                agent=self.conversational_agent_class.agent,
+                conversation_context=conversation_context,
+                enhanced_context=enhanced_context
+            )
+            
+            # Execute the conversational task
+            from crewai import Crew
+            conversational_crew = Crew(
+                agents=[self.conversational_agent_class.agent],
+                tasks=[conversational_task],
+                verbose=True
+            )
+            
+            result = conversational_crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in conversational processing: {e}")
+            return f"❌ Lỗi khi xử lý hội thoại: {str(e)}"
+    
+    def _get_enhanced_context(self, question: str) -> Dict[str, Any]:
+        """Get enhanced context using the enhanced context manager with proper fallback"""
+        
+        try:
+            # Determine the appropriate context retrieval strategy
+            strategy = self._determine_context_strategy(question)
+            
+            # Try to get enhanced context if enhanced context manager is available
+            if hasattr(self, 'enhanced_context_manager') and self.enhanced_context_manager:
+                try:
+                    enhanced_context = self.enhanced_context_manager.get_enhanced_context(
+                        session_id=self.session_id,
+                        question=question,
+                        strategy=strategy,
+                        domain="business_intelligence",
+                        conversation_type=self._classify_conversation_type(question),
+                        include_cross_session=True,
+                        max_context_age_days=30
+                    )
+                    
+                    # If we got valid context, return it
+                    if enhanced_context and enhanced_context.get("context_type") != "fallback":
+                        return enhanced_context
+                        
+                except Exception as e:
+                    logger.warning(f"Enhanced context manager failed: {e}")
+            
+            # Fallback to manual context retrieval using basic MemoryManager methods
+            logger.info("Using fallback context retrieval")
+            return self._get_fallback_enhanced_context(question, strategy)
+            
+        except Exception as e:
+            logger.error(f"Error getting enhanced context: {e}")
+            return self._get_minimal_context(question)
+    
+    def _get_fallback_enhanced_context(self, question: str, strategy: ContextRetrievalStrategy) -> Dict[str, Any]:
+        """Get enhanced context using fallback methods when enhanced context manager fails"""
+        try:
+            # Get recent conversation history
+            recent_conversation = self.memory_manager.get_session_history(
+                session_id=self.session_id,
+                limit=5,
+                include_layers=[MemoryLayer.IN_SESSION, MemoryLayer.SHORT_TERM]
+            )
+            
+            # Get semantic memories using memory manager search
+            semantic_memories = []
+            try:
+                search_results = self.memory_manager.search_message_history(
+                    query=question,
+                    session_id=self.session_id,
+                    limit=3,
+                    semantic=True,
+                    include_layers=[MemoryLayer.IN_SESSION, MemoryLayer.SHORT_TERM, MemoryLayer.LONG_TERM]
+                )
+                
+                for result in search_results:
+                    semantic_memories.append({
+                        "content": result.get("data", ""),
+                        "metadata": result.get("metadata", {}),
+                        "similarity_score": result.get("score", 0.0),
+                        "memory_layer": result.get("metadata", {}).get("searched_in_layer", "unknown"),
+                        "timestamp": result.get("metadata", {}).get("timestamp", ""),
+                        "context_type": result.get("metadata", {}).get("type", "general")
+                    })
+            except Exception as e:
+                logger.warning(f"Error in semantic search: {e}")
+            
+            # Get cross-session insights using context retrieval
+            cross_session_insights = []
+            try:
+                if strategy in [ContextRetrievalStrategy.COMPREHENSIVE, ContextRetrievalStrategy.CONTEXTUAL]:
+                    context_results = self.memory_manager.retrieve_context(
+                        session_id=self.session_id,
+                        query=question,
+                        context_types=["insight", "bi_data", "knowledge"],
+                        limit=3,
+                        include_layers=[MemoryLayer.LONG_TERM, MemoryLayer.SHORT_TERM],
+                        cross_session=True
+                    )
+                    
+                    for result in context_results:
+                        cross_session_insights.append({
+                            "insight": result.get("data", ""),
+                            "source_session": result.get("metadata", {}).get("session_id", "unknown"),
+                            "importance": result.get("importance", 0.0),
+                            "timestamp": result.get("metadata", {}).get("timestamp", ""),
+                            "context_type": result.get("metadata", {}).get("type", "unknown")
+                        })
+            except Exception as e:
+                logger.warning(f"Error getting cross-session insights: {e}")
+            
+            # Get knowledge context using knowledge adapter
+            knowledge_context = []
+            try:
+                if hasattr(self, 'knowledge_adapter') and self.knowledge_adapter:
+                    knowledge_results = self.knowledge_adapter.retrieve_knowledge(
+                        query=f"CubeJS {question}",
+                        limit=3
+                    )
+                    
+                    for result in knowledge_results:
+                        knowledge_context.append({
+                            "content": result.get("content", ""),
+                            "source": result.get("source", "unknown"),
+                            "relevance": result.get("relevance", 0.0)
+                        })
+            except Exception as e:
+                logger.warning(f"Error getting knowledge context: {e}")
+            
+            return {
+                "recent_conversation": recent_conversation,
+                "semantic_memories": semantic_memories,
+                "cross_session_insights": cross_session_insights,
+                "knowledge_context": knowledge_context,
+                "context_type": "fallback_enhanced",
+                "retrieval_metadata": {
+                    "strategy": strategy.value,
+                    "domain": "business_intelligence",
+                    "conversation_type": self._classify_conversation_type(question),
+                    "retrieved_at": datetime.now().isoformat(),
+                    "session_id": self.session_id,
+                    "fallback_used": True
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in fallback context retrieval: {e}")
+            return self._get_minimal_context(question)
+    
+    def _get_minimal_context(self, question: str) -> Dict[str, Any]:
+        """Get minimal context when all else fails"""
+        try:
+            # Just get recent conversation history
+            recent_conversation = self.memory_manager.get_session_history(
+                session_id=self.session_id,
+                limit=3,
+                include_layers=[MemoryLayer.IN_SESSION]
+            )
+            
+            return {
+                "recent_conversation": recent_conversation,
+                "semantic_memories": [],
+                "cross_session_insights": [],
+                "knowledge_context": [],
+                "context_type": "minimal",
+                "retrieval_metadata": {
+                    "strategy": "minimal",
+                    "domain": "business_intelligence",
+                    "conversation_type": self._classify_conversation_type(question),
+                    "retrieved_at": datetime.now().isoformat(),
+                    "session_id": self.session_id,
+                    "minimal_fallback": True
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in minimal context retrieval: {e}")
+            return {
+                "recent_conversation": [],
+                "semantic_memories": [],
+                "cross_session_insights": [],
+                "knowledge_context": [],
+                "context_type": "error",
+                "error": str(e),
+                "retrieval_metadata": {
+                    "strategy": "error",
+                    "domain": "business_intelligence",
+                    "conversation_type": "unknown",
+                    "retrieved_at": datetime.now().isoformat(),
+                    "session_id": self.session_id,
+                    "error": str(e)
+                }
+            }
+    
+    def _determine_context_strategy(self, question: str) -> ContextRetrievalStrategy:
+        """Determine the appropriate context retrieval strategy based on the question"""
+        
+        question_lower = question.lower()
+        
+        # Data analysis questions need comprehensive context
+        if any(keyword in question_lower for keyword in [
+            "phân tích", "dữ liệu", "báo cáo", "thống kê", "doanh thu", "lợi nhuận", "bao nhiêu"
+        ]):
+            return ContextRetrievalStrategy.COMPREHENSIVE
+        
+        # Follow-up questions need contextual strategy
+        if any(keyword in question_lower for keyword in [
+            "tiếp tục", "thêm", "chi tiết", "giải thích", "tại sao", "vì sao"
+        ]):
+            return ContextRetrievalStrategy.CONTEXTUAL
+        
+        # Greetings and casual conversation
+        if any(keyword in question_lower for keyword in [
+            "xin chào", "chào", "cảm ơn", "tạm biệt", "hello", "hi"
+        ]):
+            return ContextRetrievalStrategy.CONVERSATIONAL
+        
+        # Default to focused strategy
+        return ContextRetrievalStrategy.FOCUSED
+    
+    def _classify_conversation_type(self, question: str) -> str:
+        """Classify the conversation type for context optimization"""
+        
+        question_lower = question.lower()
+        
+        if any(keyword in question_lower for keyword in [
+            "phân tích", "dữ liệu", "báo cáo", "thống kê", "truy vấn", "bao nhiêu", "số lượng"
+        ]):
+            return "data_analysis"
+        
+        if any(keyword in question_lower for keyword in [
+            "tiếp tục", "thêm", "chi tiết"
+        ]):
+            return "follow_up"
+        
+        if any(keyword in question_lower for keyword in [
+            "giải thích", "tại sao", "như thế nào", "vì sao"
+        ]):
+            return "explanation"
+        
+        if any(keyword in question_lower for keyword in [
+            "xin chào", "chào", "cảm ơn", "hello"
+        ]):
+            return "greeting"
+        
+        return "conversational"
+    
+    def _get_cubejs_context(self, question: str) -> str:
+        """Get CubeJS-specific context using knowledge adapter"""
+        try:
+            # Use knowledge adapter to retrieve relevant CubeJS knowledge
+            knowledge_results = self.knowledge_adapter.retrieve_knowledge(
+                query=f"CubeJS {question}",
+                limit=5,
+                strategy=KnowledgeRetrievalStrategy.HYBRID
+            )
+            
+            context_parts = []
+            for result in knowledge_results:
+                content = result.get("content", "")
+                if content:
+                    context_parts.append(content)
+            
+            return "\n\n".join(context_parts) if context_parts else ""
+            
+        except Exception as e:
+            logger.warning(f"Error getting CubeJS context: {e}")
+            return ""
     
     def _generate_schema_context(self) -> str:
         """Generate clean schema context based on real CubeJS schema"""
@@ -315,753 +875,148 @@ class RefactoredVietnameseCubeJSChatbot:
             - Measures: executive_dashboard.total_daily_revenue, executive_dashboard.total_costs, executive_dashboard.operational_efficiency, executive_dashboard.cash_flow_ratio
             - Dimensions: executive_dashboard.report_date (time), executive_dashboard.company_name, executive_dashboard.department_type
 
-            ❌ DATA NOT AVAILABLE:
-            - Supplier information (nhà cung cấp)
-            - Delivery performance ratings (đánh giá hiệu suất giao hàng)
-            - Individual customer details
-            - Product-level inventory
-            - Detailed transaction records
-
-            QUERY STRATEGY FOR COMPLEX QUESTIONS:
-            - Revenue + Production efficiency → Query sales_metrics THEN production_metrics separately
-            - Company performance → Query executive_dashboard OR multiple cubes separately
-            - Financial health → Query financial_metrics for detailed data
-            - Employee productivity → Query hr_metrics AND production_metrics separately
-
             CRITICAL RULES:
             1. ONE CUBE PER QUERY - perform multiple queries if you need data from different cubes
             2. ALWAYS use cube prefix (e.g., "sales_metrics.total_revenue", NOT "total_revenue")
             3. Field names are case-sensitive and must match exactly
             4. Use appropriate cube based on question topic
             5. For time dimensions, use "created_at" for most cubes, "report_date" for executive_dashboard
-            6. Available time granularities: day, week, month, quarter, year
-            7. If asked about unavailable data, explain what IS available and suggest alternatives
         """
     
-    def _get_cubejs_knowledge_context(self, query: str) -> str:
-        """Retrieve relevant CubeJS knowledge using Golett's knowledge sources"""
-        knowledge_context = []
-        
+    def _store_conversation_with_metadata(self, question: str, response: str, enhanced_context: Dict[str, Any]):
+        """Store conversation with enhanced metadata using proper MemoryManager methods"""
         try:
-            # Search REST API knowledge
-            if "rest_api" in self.knowledge_sources:
-                rest_api_source = self.knowledge_sources["rest_api"]["source"]
-                rest_api_results = rest_api_source.retrieve(
-                    query=query,
-                    limit=3,
-                    strategy=KnowledgeRetrievalStrategy.HYBRID
-                )
-                
-                for result in rest_api_results:
-                    content = result.get("content", result.get("data", ""))
-                    if content:
-                        knowledge_context.append(f"**CubeJS REST API Knowledge:**\n{content[:500]}...")
+            # Extract metadata from enhanced context
+            retrieval_metadata = enhanced_context.get("retrieval_metadata", {})
             
-            # Search schemas knowledge
-            if "schemas" in self.knowledge_sources:
-                schemas_source = self.knowledge_sources["schemas"]["source"]
-                schemas_results = schemas_source.retrieve(
-                    query=query,
-                    limit=2,
-                    strategy=KnowledgeRetrievalStrategy.HYBRID
-                )
-                
-                for result in schemas_results:
-                    content = result.get("content", result.get("data", ""))
-                    if content:
-                        knowledge_context.append(f"**CubeJS Schema Knowledge:**\n{content[:500]}...")
-        
-        except Exception as e:
-            logger.warning(f"Error retrieving CubeJS knowledge: {e}")
-        
-        return "\n\n".join(knowledge_context) if knowledge_context else ""
-    
-    def ask(self, question: str) -> str:
-        """
-        Ask a question with intelligent conversation flow and enhanced Golett memory integration
-        
-        Args:
-            question: Vietnamese business question
-            
-        Returns:
-            Answer with appropriate conversation flow and enhanced Golett context
-        """
-        try:
-            print(f"🤔 Processing question: {question}")
-            
-            # Store the user message in Golett memory
+            # Store user message
             self.memory_manager.store_message(
                 session_id=self.session_id,
                 role="user",
                 content=question,
                 metadata={
+                    "conversation_type": retrieval_metadata.get("conversation_type", "unknown"),
+                    "context_strategy": retrieval_metadata.get("strategy", "unknown"),
+                    "domain": retrieval_metadata.get("domain", "business_intelligence"),
                     "language": "vietnamese",
-                    "domain": "business_intelligence",
+                    "system": "refactored_crew_agent_classes",
                     "timestamp": datetime.now().isoformat(),
-                    "version": "refactored"
+                    "importance": 0.6
                 },
                 memory_layer=MemoryLayer.IN_SESSION
             )
             
-            # Step 1: Classify conversation type using dedicated agent
-            conversation_type = self._classify_conversation_type(question)
-            print(f"🔍 Conversation type detected: {conversation_type}")
-            
-            # Step 2: Get enhanced context using Golett's core capabilities
-            enhanced_context = self._get_enhanced_context(question, conversation_type)
-            
-            # Step 3: Route to appropriate handler with enhanced context
-            answer = self._route_to_handler(question, conversation_type, enhanced_context)
-            
-            # Step 4: Store response and extract insights
-            self._store_response_and_insights(question, answer, conversation_type)
-            
-            return answer
-            
-        except Exception as e:
-            error_msg = f"❌ Lỗi khi xử lý câu hỏi: {str(e)}"
-            print(error_msg)
-            
-            # Store error in memory for learning
-            self.memory_manager.store_message(
-                session_id=self.session_id,
-                role="system",
-                content=f"Error: {error_msg}",
-                metadata={
-                    "type": "error",
-                    "question": question,
-                    "timestamp": datetime.now().isoformat(),
-                    "version": "refactored"
-                },
-                memory_layer=MemoryLayer.IN_SESSION
-            )
-            
-            return error_msg
-    
-    def _classify_conversation_type(self, question: str) -> str:
-        """Classify conversation type using dedicated agent"""
-        try:
-            # Create classification task
-            classification_task = self.task_factory.create_classification_task(
-                question=question,
-                agent=self.classifier_agent.agent
-            )
-            
-            # Execute classification
-            classification_crew = Crew(
-                agents=[self.classifier_agent.agent],
-                tasks=[classification_task],
-                verbose=False
-            )
-            
-            result = classification_crew.kickoff()
-            classification = str(result).strip().lower()
-            
-            # Validate result
-            valid_types = ["data_analysis", "follow_up", "conversational", "clarification"]
-            for valid_type in valid_types:
-                if valid_type in classification:
-                    return valid_type
-            
-            # Fallback logic
-            return self._fallback_classification(question)
-            
-        except Exception as e:
-            logger.warning(f"Error in conversation classification: {e}")
-            return self._fallback_classification(question)
-    
-    def _fallback_classification(self, question: str) -> str:
-        """Fallback classification logic"""
-        question_lower = question.lower().strip()
-        
-        if any(word in question_lower for word in ["bao nhiêu", "số lượng", "doanh thu", "phân tích", "thống kê"]):
-            return "data_analysis"
-        elif any(word in question_lower for word in ["tại sao", "vì sao", "giải thích", "nghĩa là gì"]):
-            return "clarification"
-        elif any(word in question_lower for word in ["xin chào", "cảm ơn", "hello", "hi"]):
-            return "conversational"
-        elif len(question_lower) < 30:
-            return "follow_up"
-        else:
-            return "conversational"
-    
-    def _get_enhanced_context(self, question: str, conversation_type: str) -> Dict[str, Any]:
-        """
-        Get enhanced context using Golett's core capabilities with proper memory retrieval
-        
-        This is the key improvement - proper use of ContextManager with semantic memory lookup!
-        """
-        try:
-            if conversation_type == "data_analysis":
-                # For data analysis, get full enhanced context with semantic retrieval
-                return self._get_comprehensive_memory_context(question)
-            
-            elif conversation_type in ["follow_up", "clarification"]:
-                # For follow-ups and clarifications, get enhanced context with recent focus
-                return self._get_contextual_memory_context(question)
-            
-            else:
-                # For conversational, get basic conversation context with some memory lookup
-                return self._get_conversational_memory_context(question)
-                
-        except Exception as e:
-            logger.error(f"Error getting enhanced context: {e}")
-            return {
-                "conversation_context": [],
-                "bi_context": [],
-                "knowledge_context": [],
-                "semantic_memories": [],
-                "cross_session_insights": []
-            }
-    
-    def _get_comprehensive_memory_context(self, question: str) -> Dict[str, Any]:
-        """
-        Get comprehensive memory context for data analysis questions
-        Uses semantic search across all memory layers
-        """
-        try:
-            # 1. Get enhanced context from data analyst agent (existing BI + knowledge context)
-            base_context = self.data_analyst_agent.get_enhanced_context(question)
-            
-            # 2. Semantic search for relevant memories across all layers
-            semantic_memories = self._semantic_memory_search(question, limit=5)
-            
-            # 3. Get cross-session business insights
-            cross_session_insights = self._get_cross_session_insights(question, limit=3)
-            
-            # 4. Get recent conversation context
-            recent_conversation = self.memory_manager.get_session_history(
-                session_id=self.session_id,
-                limit=5,
-                include_layers=[MemoryLayer.IN_SESSION, MemoryLayer.SHORT_TERM]
-            )
-            
-            # 5. Get related conversation summaries
-            related_summaries = self._get_related_conversation_summaries(question, limit=3)
-            
-            return {
-                **base_context,  # Include existing BI and knowledge context
-                "semantic_memories": semantic_memories,
-                "cross_session_insights": cross_session_insights,
-                "recent_conversation": recent_conversation,
-                "related_summaries": related_summaries
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting comprehensive memory context: {e}")
-            return self.data_analyst_agent.get_enhanced_context(question)
-    
-    def _get_contextual_memory_context(self, question: str) -> Dict[str, Any]:
-        """
-        Get contextual memory for follow-up and clarification questions
-        Focuses on recent context with some semantic lookup
-        """
-        try:
-            # 1. Get base context
-            base_context = self.data_analyst_agent.get_enhanced_context(question)
-            
-            # 2. Semantic search with focus on recent memories
-            semantic_memories = self._semantic_memory_search(
-                question, 
-                limit=3,
-                include_layers=[MemoryLayer.IN_SESSION, MemoryLayer.SHORT_TERM]
-            )
-            
-            # 3. Get recent conversation with more detail
-            recent_conversation = self.memory_manager.get_session_history(
-                session_id=self.session_id,
-                limit=8,  # More context for follow-ups
-                include_layers=[MemoryLayer.IN_SESSION, MemoryLayer.SHORT_TERM]
-            )
-            
-            return {
-                **base_context,
-                "semantic_memories": semantic_memories,
-                "recent_conversation": recent_conversation,
-                "cross_session_insights": []  # Less cross-session for follow-ups
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting contextual memory context: {e}")
-            return self.data_analyst_agent.get_enhanced_context(question)
-    
-    def _get_conversational_memory_context(self, question: str) -> Dict[str, Any]:
-        """
-        Get memory context for conversational questions
-        Light memory lookup with focus on user preferences and greetings
-        """
-        try:
-            # 1. Get recent conversation
-            conversation_context = self.memory_manager.get_session_history(
-                session_id=self.session_id,
-                limit=5,
-                include_layers=[MemoryLayer.IN_SESSION, MemoryLayer.SHORT_TERM]
-            )
-            
-            # 2. Light semantic search for user preferences and past interactions
-            user_preferences = self._semantic_memory_search(
-                f"user preferences greeting conversation {question}",
-                limit=2,
-                include_layers=[MemoryLayer.SHORT_TERM, MemoryLayer.LONG_TERM]
-            )
-            
-            return {
-                "conversation_context": conversation_context,
-                "user_preferences": user_preferences,
-                "bi_context": [],
-                "knowledge_context": [],
-                "semantic_memories": []
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting conversational memory context: {e}")
-            return {
-                "conversation_context": [],
-                "user_preferences": [],
-                "bi_context": [],
-                "knowledge_context": []
-            }
-    
-    def _semantic_memory_search(
-        self, 
-        query: str, 
-        limit: int = 5, 
-        include_layers: List[MemoryLayer] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Perform semantic search across memory layers using correct MemoryManager methods
-        """
-        try:
-            if include_layers is None:
-                include_layers = [MemoryLayer.IN_SESSION, MemoryLayer.SHORT_TERM, MemoryLayer.LONG_TERM]
-            
-            # Use the correct method: search_across_all_layers for comprehensive search
-            semantic_results = self.memory_manager.search_across_all_layers(
-                query=query,
-                session_id=self.session_id,
-                limit=limit,
-                include_layer_weights=True
-            )
-            
-            # Filter and format results
-            formatted_results = []
-            for result in semantic_results:
-                formatted_result = {
-                    "content": result.get("data", ""),
-                    "metadata": result.get("metadata", {}),
-                    "similarity_score": result.get("score", 0.0),
-                    "weighted_score": result.get("weighted_score", result.get("score", 0.0)),
-                    "memory_layer": result.get("metadata", {}).get("searched_in_layer", "unknown"),
-                    "timestamp": result.get("metadata", {}).get("timestamp", ""),
-                    "context_type": result.get("metadata", {}).get("type", "general")
-                }
-                formatted_results.append(formatted_result)
-            
-            logger.info(f"Found {len(formatted_results)} semantic memories for query: {query[:50]}...")
-            return formatted_results
-            
-        except Exception as e:
-            logger.warning(f"Error in semantic memory search: {e}")
-            # Fallback to message history search
-            try:
-                message_results = self.memory_manager.search_message_history(
-                    query=query,
-                    session_id=self.session_id,
-                    limit=limit,
-                    semantic=True,
-                    include_layers=include_layers
-                )
-                
-                # Format message results
-                formatted_results = []
-                for result in message_results:
-                    formatted_result = {
-                        "content": result.get("data", ""),
-                        "metadata": result.get("metadata", {}),
-                        "similarity_score": result.get("score", 0.0),
-                        "memory_layer": result.get("metadata", {}).get("searched_in_layer", "unknown"),
-                        "timestamp": result.get("metadata", {}).get("timestamp", ""),
-                        "context_type": "message"
-                    }
-                    formatted_results.append(formatted_result)
-                
-                logger.info(f"Fallback search found {len(formatted_results)} message memories")
-                return formatted_results
-                
-            except Exception as fallback_error:
-                logger.warning(f"Fallback search also failed: {fallback_error}")
-                return []
-    
-    def _get_cross_session_insights(self, question: str, limit: int = 3) -> List[Dict[str, Any]]:
-        """
-        Get business insights from other sessions that might be relevant
-        Uses ContextManager's cross-session capabilities
-        """
-        try:
-            # Use ContextManager to retrieve cross-session BI context
-            cross_session_bi = self.context_manager.retrieve_bi_context(
-                session_id=self.session_id,
-                query=question,
-                limit=limit,
-                include_layers=[MemoryLayer.LONG_TERM],
-                cross_session=True  # This is the key - cross-session access!
-            )
-            
-            # Format for use
-            formatted_insights = []
-            for insight in cross_session_bi:
-                formatted_insight = {
-                    "insight": insight.get("data", ""),
-                    "source_session": insight.get("metadata", {}).get("session_id", "unknown"),
-                    "importance": insight.get("importance", 0.0),
-                    "timestamp": insight.get("metadata", {}).get("extracted_at", ""),
-                    "question_context": insight.get("metadata", {}).get("question", "")
-                }
-                formatted_insights.append(formatted_insight)
-            
-            logger.info(f"Found {len(formatted_insights)} cross-session insights")
-            return formatted_insights
-            
-        except Exception as e:
-            logger.warning(f"Error getting cross-session insights: {e}")
-            return []
-    
-    def _get_related_conversation_summaries(self, question: str, limit: int = 3) -> List[Dict[str, Any]]:
-        """
-        Get related conversation summaries using correct MemoryManager methods
-        """
-        try:
-            # Use ContextManager to retrieve conversation summaries
-            summary_results = self.context_manager.retrieve_conversation_summaries(
-                session_id=self.session_id,
-                query=question,
-                limit=limit,
-                include_layers=[MemoryLayer.SHORT_TERM, MemoryLayer.LONG_TERM],
-                cross_session=False  # Start with current session only
-            )
-            
-            # If no results, try cross-session
-            if not summary_results:
-                summary_results = self.context_manager.retrieve_conversation_summaries(
-                    session_id=self.session_id,
-                    query=question,
-                    limit=limit,
-                    include_layers=[MemoryLayer.LONG_TERM],
-                    cross_session=True
-                )
-            
-            formatted_summaries = []
-            for summary in summary_results:
-                formatted_summary = {
-                    "summary": summary.get("data", ""),
-                    "topics": summary.get("metadata", {}).get("topics", []),
-                    "timestamp": summary.get("metadata", {}).get("start_time", ""),
-                    "conversation_type": summary.get("metadata", {}).get("conversation_type", "unknown"),
-                    "session_id": summary.get("metadata", {}).get("session_id", "unknown")
-                }
-                formatted_summaries.append(formatted_summary)
-            
-            logger.info(f"Found {len(formatted_summaries)} related conversation summaries")
-            return formatted_summaries
-            
-        except Exception as e:
-            logger.warning(f"Error getting related conversation summaries: {e}")
-            # Fallback to general context retrieval
-            try:
-                fallback_results = self.memory_manager.retrieve_context(
-                    session_id=self.session_id,
-                    query=f"conversation summary {question}",
-                    context_types=["conversation_summary"],
-                    limit=limit,
-                    include_layers=[MemoryLayer.SHORT_TERM, MemoryLayer.LONG_TERM],
-                    cross_session=False
-                )
-                
-                formatted_summaries = []
-                for summary in fallback_results:
-                    formatted_summary = {
-                        "summary": summary.get("data", ""),
-                        "topics": summary.get("metadata", {}).get("topics", []),
-                        "timestamp": summary.get("metadata", {}).get("timestamp", ""),
-                        "conversation_type": summary.get("metadata", {}).get("type", "unknown")
-                    }
-                    formatted_summaries.append(formatted_summary)
-                
-                return formatted_summaries
-                
-            except Exception as fallback_error:
-                logger.warning(f"Fallback conversation summary retrieval failed: {fallback_error}")
-                return []
-    
-    def _route_to_handler(self, question: str, conversation_type: str, enhanced_context: Dict[str, Any]) -> str:
-        """Route to appropriate handler based on conversation type"""
-        
-        try:
-            if conversation_type == "data_analysis":
-                return self._handle_data_analysis(question, enhanced_context)
-            
-            elif conversation_type == "follow_up":
-                return self._handle_follow_up(question, enhanced_context)
-            
-            elif conversation_type == "clarification":
-                return self._handle_clarification(question, enhanced_context)
-            
-            else:  # conversational
-                return self._handle_conversational(question, enhanced_context)
-                
-        except Exception as e:
-            logger.error(f"Error in conversation routing: {e}")
-            return f"❌ Lỗi khi xử lý câu hỏi: {str(e)}"
-    
-    def _handle_data_analysis(self, question: str, enhanced_context: Dict[str, Any]) -> str:
-        """Handle data analysis questions with enhanced Golett context"""
-        try:
-            print("📊 Handling data analysis with enhanced Golett context...")
-            
-            # Create data analysis task with enhanced context
-            task = self.task_factory.create_data_analysis_task(
-                question=question,
-                agent=self.data_analyst_agent.agent,
-                enhanced_context=enhanced_context
-            )
-            
-            # Execute with crew
-            crew = Crew(
-                agents=[self.data_analyst_agent.agent],
-                tasks=[task],
-                verbose=True
-            )
-            
-            result = crew.kickoff()
-            return str(result)
-            
-        except Exception as e:
-            logger.error(f"Error in data analysis: {e}")
-            return f"❌ Lỗi khi phân tích dữ liệu: {str(e)}"
-    
-    def _handle_follow_up(self, question: str, enhanced_context: Dict[str, Any]) -> str:
-        """Handle follow-up questions with enhanced Golett context"""
-        try:
-            print("🔄 Handling follow-up with enhanced Golett context...")
-            
-            # Create follow-up task with enhanced context
-            task = self.task_factory.create_follow_up_task(
-                question=question,
-                agent=self.follow_up_agent.agent,
-                enhanced_context=enhanced_context
-            )
-            
-            # Execute with crew
-            crew = Crew(
-                agents=[self.follow_up_agent.agent],
-                tasks=[task],
-                verbose=True
-            )
-            
-            result = crew.kickoff()
-            return str(result)
-            
-        except Exception as e:
-            logger.error(f"Error in follow-up handling: {e}")
-            return f"❌ Lỗi khi xử lý câu hỏi tiếp theo: {str(e)}"
-    
-    def _handle_clarification(self, question: str, enhanced_context: Dict[str, Any]) -> str:
-        """Handle clarification questions with enhanced Golett context"""
-        try:
-            print("❓ Handling clarification with enhanced Golett context...")
-            
-            # Create explanation task with enhanced context
-            task = self.task_factory.create_explanation_task(
-                question=question,
-                agent=self.explanation_agent.agent,
-                enhanced_context=enhanced_context
-            )
-            
-            # Execute with crew
-            crew = Crew(
-                agents=[self.explanation_agent.agent],
-                tasks=[task],
-                verbose=True
-            )
-            
-            result = crew.kickoff()
-            return str(result)
-            
-        except Exception as e:
-            logger.error(f"Error in clarification handling: {e}")
-            return f"❌ Lỗi khi giải thích: {str(e)}"
-    
-    def _handle_conversational(self, question: str, enhanced_context: Dict[str, Any]) -> str:
-        """Handle conversational questions"""
-        try:
-            print("💬 Handling conversational question...")
-            
-            # Create conversational task with enhanced context
-            task = self.task_factory.create_conversational_task(
-                question=question,
-                agent=self.conversational_agent.agent,
-                conversation_context=enhanced_context.get("conversation_context", []),
-                enhanced_context=enhanced_context
-            )
-            
-            # Execute with crew
-            crew = Crew(
-                agents=[self.conversational_agent.agent],
-                tasks=[task],
-                verbose=True
-            )
-            
-            result = crew.kickoff()
-            return str(result)
-            
-        except Exception as e:
-            logger.error(f"Error in conversational handling: {e}")
-            return f"❌ Lỗi khi trò chuyện: {str(e)}"
-    
-    def _store_response_and_insights(self, question: str, answer: str, conversation_type: str):
-        """Store response and extract insights using Golett's capabilities"""
-        try:
-            # Store the assistant response
+            # Store assistant response
             self.memory_manager.store_message(
                 session_id=self.session_id,
                 role="assistant",
-                content=answer,
+                content=response,
                 metadata={
+                    "conversation_type": retrieval_metadata.get("conversation_type", "unknown"),
+                    "context_strategy": retrieval_metadata.get("strategy", "unknown"),
+                    "domain": retrieval_metadata.get("domain", "business_intelligence"),
                     "language": "vietnamese",
-                    "domain": "business_intelligence",
+                    "system": "refactored_crew_agent_classes",
                     "timestamp": datetime.now().isoformat(),
                     "question": question,
-                    "conversation_type": conversation_type,
-                    "version": "refactored"
+                    "context_sources": {
+                        "semantic_memories": len(enhanced_context.get("semantic_memories", [])),
+                        "cross_session_insights": len(enhanced_context.get("cross_session_insights", [])),
+                        "related_summaries": len(enhanced_context.get("related_summaries", []))
+                    },
+                    "importance": 0.7
                 },
                 memory_layer=MemoryLayer.IN_SESSION
             )
             
-            # Extract and store business insights (for data analysis)
-            if conversation_type == "data_analysis":
-                self._extract_and_store_insights(question, answer)
-            
-            # Store conversation context using ContextManager
-            self._store_conversation_context(question, answer, conversation_type)
+            # Store insights if this was a data analysis conversation
+            if retrieval_metadata.get("conversation_type") == "data_analysis":
+                self._extract_and_store_insights(question, response)
             
         except Exception as e:
-            logger.warning(f"Error storing response and insights: {e}")
+            logger.warning(f"Error storing conversation with metadata: {e}")
     
-    def _extract_and_store_insights(self, question: str, answer: str):
-        """Extract and store business insights using Golett's ContextManager"""
+    def _extract_and_store_insights(self, question: str, response: str):
+        """Extract and store insights from data analysis conversations using proper MemoryManager methods"""
         try:
-            insights = self._extract_insights_from_answer(answer)
+            # Simple insight extraction (could be enhanced with NLP)
+            insights = []
             
-            if insights:
-                for insight in insights:
-                    # Use ContextManager to store BI context - key improvement!
-                    self.context_manager.store_bi_context(
-                        session_id=self.session_id,
-                        data_type="business_insight",
-                        data=insight,
-                        description=f"Business insight from Vietnamese BI analysis",
-                        importance=0.8,
-                        metadata={
-                            "source": "vietnamese_chatbot_refactored",
-                            "question": question,
-                            "language": "vietnamese",
-                            "extracted_at": datetime.now().isoformat(),
-                            "version": "refactored"
-                        },
-                        memory_layer=MemoryLayer.LONG_TERM
-                    )
-                
-                logger.info(f"Stored {len(insights)} business insights using ContextManager")
-        
-        except Exception as e:
-            logger.warning(f"Error extracting and storing insights: {e}")
-    
-    def _extract_insights_from_answer(self, answer: str) -> List[str]:
-        """Extract business insights from the answer"""
-        insights = []
-        
-        insight_patterns = [
-            "tăng", "giảm", "cao nhất", "thấp nhất", "xu hướng",
-            "hiệu suất", "doanh thu", "chi phí", "lợi nhuận",
-            "so với", "tháng trước", "năm trước", "cải thiện"
-        ]
-        
-        sentences = answer.split('.')
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if len(sentence) > 20 and any(pattern in sentence.lower() for pattern in insight_patterns):
-                insights.append(sentence)
-        
-        return insights[:3]
-    
-    def _store_conversation_context(self, question: str, answer: str, conversation_type: str):
-        """Store conversation context using Golett's ContextManager"""
-        try:
-            question_str = str(question) if question is not None else ""
-            answer_str = str(answer) if answer is not None else ""
-            summary = f"Q: {question_str[:100]}... A: {answer_str[:200]}..."
+            response_lower = response.lower()
+            if "tăng" in response_lower or "giảm" in response_lower:
+                insights.append("trend_analysis")
             
-            # Use ContextManager for conversation summary - key improvement!
-            self.context_manager.store_conversation_summary(
-                session_id=self.session_id,
-                summary=summary,
-                start_time=datetime.now().isoformat(),
-                end_time=datetime.now().isoformat(),
-                topics=self._extract_topics_from_text(question_str + " " + answer_str),
-                metadata={
-                    "language": "vietnamese",
-                    "domain": "business_intelligence",
-                    "chatbot": "vietnamese_cubejs_refactored",
-                    "conversation_type": conversation_type,
-                    "version": "refactored"
-                }
-            )
+            if "%" in response or "phần trăm" in response_lower:
+                insights.append("percentage_analysis")
+            
+            if "so sánh" in response_lower or "comparison" in response_lower:
+                insights.append("comparative_analysis")
+            
+            # Store insights using store_context method
+            for insight in insights:
+                self.memory_manager.store_context(
+                    session_id=self.session_id,
+                    context_type="insight",
+                    data={
+                        "insight_type": insight,
+                        "description": f"Insight from question: {question[:100]}...",
+                        "question": question,
+                        "response": response[:200],
+                        "timestamp": datetime.now().isoformat()
+                    },
+                    importance=0.6,
+                    metadata={
+                        "insight_type": insight,
+                        "domain": "business_intelligence",
+                        "language": "vietnamese",
+                        "system": "refactored_crew_agent_classes"
+                    },
+                    memory_layer=MemoryLayer.SHORT_TERM
+                )
             
         except Exception as e:
-            logger.warning(f"Error storing conversation context: {e}")
-    
-    def _extract_topics_from_text(self, text: str) -> List[str]:
-        """Extract topics from text"""
-        vietnamese_business_topics = {
-            "doanh thu": "revenue",
-            "bán hàng": "sales", 
-            "tài chính": "finance",
-            "sản xuất": "production",
-            "nhân sự": "hr",
-            "công ty": "company",
-            "chi phí": "cost",
-            "lợi nhuận": "profit",
-            "hiệu suất": "efficiency",
-            "khách hàng": "customer"
-        }
-        
-        topics = []
-        text_lower = text.lower()
-        
-        for vietnamese_term, english_topic in vietnamese_business_topics.items():
-            if vietnamese_term in text_lower:
-                topics.append(english_topic)
-        
-        return list(set(topics))
+            logger.warning(f"Error extracting insights: {e}")
     
     def get_memory_stats(self) -> Dict[str, Any]:
         """Get enhanced memory statistics"""
         try:
-            session_info = self.session_manager.get_session_info(self.session_id)
-            layer_stats = self.memory_manager.get_layer_statistics()
-            history = self.memory_manager.get_session_history(self.session_id, limit=1000)
-            
-            return {
-                "session_info": session_info,
-                "layer_statistics": layer_stats,
-                "conversation_count": len(history),
+            base_stats = {
                 "session_id": self.session_id,
-                "memory_backend": "Golett Memory System (Enhanced)",
-                "version": "refactored",
-                "architecture": "modular",
-                "agents_count": 5,
-                "knowledge_sources": len(self.knowledge_sources)
+                "memory_backend": "Golett with Enhanced Context Manager",
+                "agent_classes": "Active",
+                "task_factory": "Active",
+                "knowledge_adapter": "Active",
+                "version": "refactored_agent_classes",
+                "architecture": "agent_task_classes"
             }
+            
+            # Get session info
+            session_info = self.session_manager.get_session_info(self.session_id)
+            if session_info:
+                base_stats["session_info"] = session_info
+            
+            # Get conversation count
+            history = self.memory_manager.get_session_history(
+                session_id=self.session_id,
+                limit=100
+            )
+            base_stats["conversation_count"] = len(history)
+            
+            # Get agent class information
+            base_stats["agent_classes_count"] = 5  # We have 5 agent classes
+            base_stats["agent_class_names"] = [
+                "VietnameseDataAnalystAgent",
+                "VietnameseConversationClassifierAgent", 
+                "VietnameseFollowUpAgent",
+                "VietnameseConversationalAgent",
+                "VietnameseExplanationAgent"
+            ]
+            
+            # Get knowledge collections
+            collections = self.knowledge_adapter.list_collections()
+            base_stats["knowledge_collections"] = len(collections)
+            
+            return base_stats
             
         except Exception as e:
             logger.error(f"Error getting memory stats: {e}")
@@ -1086,11 +1041,11 @@ class RefactoredVietnameseCubeJSChatbot:
             
             self.session_id = self.session_manager.create_session(
                 user_id=self.user_id,
-                session_type="vietnamese_bi_refactored",
+                session_type="vietnamese_bi_refactored_agent_classes",
                 preferences={
                     "language": "vietnamese", 
                     "domain": "business_intelligence",
-                    "version": "refactored"
+                    "version": "refactored_agent_classes"
                 }
             )
             
@@ -1100,38 +1055,101 @@ class RefactoredVietnameseCubeJSChatbot:
             logger.error(f"Error clearing session memory: {e}")
     
     def test_connection(self) -> Dict[str, Any]:
-        """Test CubeJS connection and enhanced Golett memory system"""
+        """Test CubeJS connection and enhanced Golett memory system with agent classes"""
         try:
-            # Test CubeJS schema
-            schema = self.schema_mapper.refresh_schema()
-            
-            if "error" in schema:
-                return {
-                    "status": "error",
-                    "message": f"Không thể kết nối CubeJS: {schema['error']}"
-                }
-            
-            # Test enhanced Golett memory
-            test_key = f"test_refactored_{datetime.now().timestamp()}"
-            self.memory_manager.store_message(
-                session_id=self.session_id,
-                role="system",
-                content="Refactored connection test",
-                metadata={"test": True, "version": "refactored"}
-            )
-            
-            return {
+            result = {
                 "status": "success",
-                "message": f"✅ Kết nối thành công! CubeJS: {schema['total_cubes']} cubes, Enhanced Golett Memory: Active",
-                "cubes": list(schema["cubes"].keys()),
-                "last_updated": schema["last_updated"],
-                "memory_system": "Enhanced Golett Memory System",
-                "session_id": self.session_id,
-                "version": "refactored",
-                "architecture": "modular",
-                "agents": ["DataAnalyst", "Classifier", "FollowUp", "Conversational", "Explanation"],
-                "knowledge_sources": list(self.knowledge_sources.keys())
+                "message": "✅ All systems connected",
+                "systems": {}
             }
+            
+            # Test memory manager
+            try:
+                self.memory_manager.get_session_history(self.session_id, limit=1)
+                result["systems"]["memory_manager"] = "✅ Connected"
+            except Exception as e:
+                result["systems"]["memory_manager"] = f"❌ Error: {e}"
+                result["status"] = "error"
+            
+            # Test enhanced context manager
+            try:
+                test_context = self.enhanced_context_manager.get_enhanced_context(
+                    session_id=self.session_id,
+                    question="test",
+                    strategy=ContextRetrievalStrategy.CONVERSATIONAL
+                )
+                result["systems"]["enhanced_context_manager"] = "✅ Connected"
+            except Exception as e:
+                result["systems"]["enhanced_context_manager"] = f"❌ Error: {e}"
+                result["status"] = "error"
+            
+            # Test agent classes
+            try:
+                agent_count = len([
+                    self.data_analyst_agent_class,
+                    self.classifier_agent_class,
+                    self.follow_up_agent_class,
+                    self.conversational_agent_class,
+                    self.explanation_agent_class
+                ])
+                result["systems"]["agent_classes"] = f"✅ Connected ({agent_count} agent classes)"
+            except Exception as e:
+                result["systems"]["agent_classes"] = f"❌ Error: {e}"
+                result["status"] = "error"
+            
+            # Test task factory
+            try:
+                if hasattr(self, 'task_factory') and self.task_factory:
+                    result["systems"]["task_factory"] = "✅ Connected"
+                else:
+                    result["systems"]["task_factory"] = "❌ Not initialized"
+                    result["status"] = "error"
+            except Exception as e:
+                result["systems"]["task_factory"] = f"❌ Error: {e}"
+                result["status"] = "error"
+            
+            # Test knowledge adapter
+            try:
+                collections = self.knowledge_adapter.list_collections()
+                result["systems"]["knowledge_adapter"] = f"✅ Connected ({len(collections)} collections)"
+            except Exception as e:
+                result["systems"]["knowledge_adapter"] = f"❌ Error: {e}"
+                result["status"] = "error"
+            
+            # Test CubeJS schema
+            try:
+                schema = self.schema_mapper.refresh_schema()
+                if "error" in schema:
+                    result["systems"]["cubejs_schema"] = f"❌ Error: {schema['error']}"
+                    result["status"] = "error"
+                else:
+                    result["systems"]["cubejs_schema"] = f"✅ Connected ({schema['total_cubes']} cubes)"
+                    result["cubes"] = list(schema["cubes"].keys())
+                    result["last_updated"] = schema["last_updated"]
+            except Exception as e:
+                result["systems"]["cubejs_schema"] = f"❌ Error: {e}"
+            
+            if result["status"] == "success":
+                result["message"] = f"✅ Kết nối thành công! Enhanced Golett Memory with Agent Classes: Active"
+            else:
+                result["message"] = "⚠️ Some systems have connection issues"
+            
+            result.update({
+                "memory_system": "Enhanced Golett Memory System with Agent Classes",
+                "session_id": self.session_id,
+                "version": "refactored_agent_classes",
+                "architecture": "agent_task_classes",
+                "agent_classes": [
+                    "VietnameseDataAnalystAgent",
+                    "VietnameseConversationClassifierAgent", 
+                    "VietnameseFollowUpAgent",
+                    "VietnameseConversationalAgent",
+                    "VietnameseExplanationAgent"
+                ],
+                "knowledge_collections": len(self.knowledge_adapter.list_collections())
+            })
+            
+            return result
             
         except Exception as e:
             return {
@@ -1139,11 +1157,135 @@ class RefactoredVietnameseCubeJSChatbot:
                 "message": f"❌ Lỗi kết nối: {str(e)}"
             }
 
+    def _format_enhanced_context_for_agents(self, enhanced_context: Dict[str, Any]) -> str:
+        """Format enhanced context for agent backstories with better structure"""
+        
+        context_parts = []
+        
+        # Add context type information
+        context_type = enhanced_context.get("context_type", "unknown")
+        retrieval_metadata = enhanced_context.get("retrieval_metadata", {})
+        
+        context_parts.append(f"CONTEXT RETRIEVAL INFO:")
+        context_parts.append(f"- Strategy: {retrieval_metadata.get('strategy', 'unknown')}")
+        context_parts.append(f"- Context Type: {context_type}")
+        context_parts.append(f"- Domain: {retrieval_metadata.get('domain', 'unknown')}")
+        context_parts.append("")
+        
+        # Format recent conversation
+        recent_conversation = enhanced_context.get("recent_conversation", [])
+        if recent_conversation:
+            context_parts.append("RECENT CONVERSATION:")
+            for msg in recent_conversation[-3:]:  # Last 3 messages
+                role = msg.get("role", "unknown")
+                content = msg.get("content", "")
+                timestamp = msg.get("metadata", {}).get("timestamp", "")
+                
+                if content:
+                    context_parts.append(f"- {role.upper()}: {content[:200]}...")
+                    if timestamp:
+                        context_parts.append(f"  (Time: {timestamp})")
+            context_parts.append("")
+        
+        # Format semantic memories
+        semantic_memories = enhanced_context.get("semantic_memories", [])
+        if semantic_memories:
+            context_parts.append("RELEVANT MEMORIES:")
+            for memory in semantic_memories[:3]:  # Top 3 memories
+                content = memory.get("content", "")
+                score = memory.get("similarity_score", 0.0)
+                layer = memory.get("memory_layer", "unknown")
+                
+                if content:
+                    context_parts.append(f"- [{layer}] (Score: {score:.2f}): {content[:150]}...")
+            context_parts.append("")
+        
+        # Format cross-session insights
+        cross_session_insights = enhanced_context.get("cross_session_insights", [])
+        if cross_session_insights:
+            context_parts.append("CROSS-SESSION INSIGHTS:")
+            for insight in cross_session_insights[:2]:  # Top 2 insights
+                insight_content = insight.get("insight", "")
+                importance = insight.get("importance", 0.0)
+                source_session = insight.get("source_session", "unknown")
+                
+                if insight_content:
+                    context_parts.append(f"- (Importance: {importance:.2f}, Session: {source_session}): {insight_content[:150]}...")
+            context_parts.append("")
+        
+        # Format knowledge context
+        knowledge_context = enhanced_context.get("knowledge_context", [])
+        if knowledge_context:
+            context_parts.append("KNOWLEDGE BASE:")
+            for knowledge in knowledge_context[:2]:  # Top 2 knowledge items
+                content = knowledge.get("content", "")
+                source = knowledge.get("source", "unknown")
+                relevance = knowledge.get("relevance", 0.0)
+                
+                if content:
+                    context_parts.append(f"- [{source}] (Relevance: {relevance:.2f}): {content[:150]}...")
+            context_parts.append("")
+        
+        # Format related summaries if available
+        related_summaries = enhanced_context.get("related_summaries", [])
+        if related_summaries:
+            context_parts.append("RELATED CONVERSATION SUMMARIES:")
+            for summary in related_summaries[:2]:  # Top 2 summaries
+                summary_content = summary.get("summary", "")
+                topics = summary.get("topics", [])
+                
+                if summary_content:
+                    context_parts.append(f"- Topics: {', '.join(topics[:3])}")
+                    context_parts.append(f"  Summary: {summary_content[:150]}...")
+            context_parts.append("")
+        
+        # Add domain context if available
+        domain_context = enhanced_context.get("domain_context", [])
+        if domain_context:
+            context_parts.append("DOMAIN-SPECIFIC CONTEXT:")
+            for domain_item in domain_context[:2]:  # Top 2 domain items
+                content = domain_item.get("content", "")
+                context_type = domain_item.get("context_type", "unknown")
+                importance = domain_item.get("importance", 0.0)
+                
+                if content:
+                    context_parts.append(f"- [{context_type}] (Importance: {importance:.2f}): {content[:150]}...")
+            context_parts.append("")
+        
+        # Add fallback information if context retrieval had issues
+        if context_type in ["fallback_enhanced", "minimal", "error"]:
+            context_parts.append("CONTEXT RETRIEVAL NOTES:")
+            if context_type == "fallback_enhanced":
+                context_parts.append("- Using fallback context retrieval due to enhanced manager issues")
+            elif context_type == "minimal":
+                context_parts.append("- Using minimal context due to retrieval failures")
+            elif context_type == "error":
+                error_msg = enhanced_context.get("error", "Unknown error")
+                context_parts.append(f"- Context retrieval error: {error_msg}")
+            context_parts.append("")
+        
+        # Add usage instructions
+        context_parts.append("CONTEXT USAGE INSTRUCTIONS:")
+        context_parts.append("- Use this context to provide more informed and relevant responses")
+        context_parts.append("- Reference specific memories or insights when relevant")
+        context_parts.append("- Consider conversation history for continuity")
+        context_parts.append("- Leverage knowledge base information for accurate technical details")
+        
+        formatted_context = "\n".join(context_parts)
+        
+        # Log context summary for debugging
+        logger.info(f"Formatted context summary: {len(recent_conversation)} recent messages, "
+                   f"{len(semantic_memories)} semantic memories, "
+                   f"{len(cross_session_insights)} cross-session insights, "
+                   f"{len(knowledge_context)} knowledge items")
+        
+        return formatted_context
+
 
 def main():
-    """Start the interactive refactored Vietnamese chatbot"""
-    print("🚀 Starting Refactored Vietnamese Business Intelligence Chatbot...")
-    print("🔧 Enhanced with proper Golett core integration and modular architecture")
+    """Start the interactive refactored Vietnamese chatbot with agent classes"""
+    print("🚀 Starting Refactored Vietnamese Business Intelligence Chatbot with Agent Classes...")
+    print("🔧 Enhanced with proper agent and task class separation")
     
     # Get environment variables
     postgres_connection = os.getenv("POSTGRES_CONNECTION")
@@ -1157,13 +1299,13 @@ def main():
         return
     
     try:
-        # Initialize refactored chatbot
+        # Initialize refactored chatbot with agent classes
         chatbot = RefactoredVietnameseCubeJSChatbot(
             postgres_connection=postgres_connection,
             qdrant_url=qdrant_url,
             cubejs_api_url=cubejs_api_url,
             cubejs_api_token=cubejs_api_token,
-            user_id="interactive_user_refactored"
+            user_id="interactive_user_refactored_agent_classes"
         )
         
         # Test connection
@@ -1179,12 +1321,12 @@ def main():
         print(f"🧠 Memory Backend: {memory_stats.get('memory_backend', 'Unknown')}")
         print(f"📱 Session ID: {chatbot.session_id}")
         print(f"🏗️ Architecture: {memory_stats.get('architecture', 'Unknown')}")
-        print(f"🤖 Agents: {memory_stats.get('agents_count', 0)}")
-        print(f"📚 Knowledge Sources: {memory_stats.get('knowledge_sources', 0)}")
+        print(f"👥 Agent Classes: {memory_stats.get('agent_classes_count', 0)}")
+        print(f"📚 Knowledge Collections: {memory_stats.get('knowledge_collections', 0)}")
         
         print("\n" + "=" * 70)
-        print("💬 Refactored Vietnamese BI Chatbot with Enhanced Golett Integration Ready!")
-        print("🔧 Features: Modular Architecture | Enhanced Context | Cross-Session Learning")
+        print("💬 Refactored Vietnamese BI Chatbot with Agent Classes Ready!")
+        print("🔧 Features: Agent Classes | Task Factory | Enhanced Context | Cross-Session Learning")
         print("Type your questions in Vietnamese or 'exit' to quit")
         print("=" * 70)
         
@@ -1194,16 +1336,16 @@ def main():
                 user_input = input("\n🤔 Câu hỏi của bạn: ").strip()
                 
                 if user_input.lower() in ['exit', 'quit', 'thoát']:
-                    print("\n👋 Cảm ơn bạn đã sử dụng chatbot refactored!")
+                    print("\n👋 Cảm ơn bạn đã sử dụng chatbot refactored với agent classes!")
                     break
                 
                 if not user_input:
                     continue
                 
                 # Process the question
-                print(f"\n🤖 Đang xử lý với enhanced Golett integration...")
+                print(f"\n🤖 Đang xử lý với agent classes và task factory...")
                 answer = chatbot.ask(user_input)
-                print(f"\n💡 **Trả lời (Enhanced):**\n{answer}")
+                print(f"\n💡 **Trả lời (Agent Classes):**\n{answer}")
                 
             except KeyboardInterrupt:
                 print("\n\n👋 Chat interrupted. Goodbye!")
@@ -1212,7 +1354,7 @@ def main():
                 print(f"\n❌ Lỗi: {str(e)}")
 
     except Exception as e:
-        print(f"❌ Error starting refactored chatbot: {str(e)}")
+        print(f"❌ Error starting refactored chatbot with agent classes: {str(e)}")
 
 if __name__ == "__main__":
     main()

@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Optional, Union, Tuple
 from datetime import datetime, timedelta
 from enum import Enum
-import inspect
 
 try:
     from crewai.knowledge.source.base_knowledge_source import BaseKnowledgeSource

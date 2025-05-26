@@ -1,25 +1,85 @@
-from typing import Any, Dict, List, Optional, Tuple, Callable
+from typing import Any, Dict, List, Optional, Tuple, Callable, Protocol
+from abc import ABC, abstractmethod
+from enum import Enum
+from datetime import datetime
 
 from crewai import Agent, Crew, Task, Process
 from crewai.agent import Agent as CrewAgent
 
 from golett.chat.session import ChatSession
-from golett.agents.bi.analyzer import BiQueryAnalyzer
 from golett.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-class ChatFlowManager:
-    """
-    Manages the conversation flow and decision-making process.
+
+class FlowStage(Enum):
+    """Standard flow stages for chat processing"""
+    ANALYSIS = "analysis"
+    STRATEGY = "strategy"
+    GENERATION = "generation"
+    VALIDATION = "validation"
+
+
+class FlowDecision:
+    """Represents a decision made during the flow"""
+    def __init__(self, decision_type: str, value: Any, reasoning: str, confidence: float = 1.0):
+        self.decision_type = decision_type
+        self.value = value
+        self.reasoning = reasoning
+        self.confidence = confidence
+        self.timestamp = datetime.now().isoformat()
+
+
+class FlowAgentConfig:
+    """Configuration for a flow agent"""
+    def __init__(
+        self,
+        name: str,
+        role: str,
+        goal: str,
+        backstory: str,
+        stage: FlowStage,
+        tools: List[Any] = None
+    ):
+        self.name = name
+        self.role = role
+        self.goal = goal
+        self.backstory = backstory
+        self.stage = stage
+        self.tools = tools or []
+
+
+class FlowTaskConfig:
+    """Configuration for a flow task"""
+    def __init__(
+        self,
+        stage: FlowStage,
+        description_template: str,
+        expected_output: str,
+        decision_parser: Callable[[str], FlowDecision] = None
+    ):
+        self.stage = stage
+        self.description_template = description_template
+        self.expected_output = expected_output
+        self.decision_parser = decision_parser or self._default_parser
     
-    This class orchestrates the interaction between different agents
-    to analyze queries, make decisions, and generate appropriate responses.
+    def _default_parser(self, result: str) -> FlowDecision:
+        """Default parser that returns the raw result"""
+        return FlowDecision("generic", result, "Raw result")
+
+
+class ChatFlowManagerBase(ABC):
+    """
+    Abstract base class for chat flow managers.
+    
+    This provides a configurable framework for managing conversation flows
+    across different domains without hardcoding specific logic.
     """
     
     def __init__(
         self,
         session: ChatSession,
+        domain: str = "general",
         llm_provider: str = "openai",
         llm_model: str = "gpt-4o",
         temperature: float = 0.7
@@ -29,76 +89,60 @@ class ChatFlowManager:
         
         Args:
             session: The chat session to manage
+            domain: The domain this flow manager handles
             llm_provider: The LLM provider (e.g., "openai", "anthropic")
             llm_model: The LLM model to use
             temperature: The temperature for LLM responses
         """
         self.session = session
+        self.domain = domain
         self.llm_provider = llm_provider
         self.llm_model = llm_model
         self.temperature = temperature
         
-        # Initialize agents for different stages of the flow
+        # Flow configuration
+        self.agent_configs = {}
+        self.task_configs = {}
+        self.flow_stages = []
+        self.decisions = {}
+        
+        # Initialize domain-specific configuration
+        self._configure_flow()
+        
+        # Initialize agents based on configuration
         self._initialize_agents()
         
-        logger.info(f"Chat flow manager initialized for session: {session.session_id}")
+        logger.info(f"Chat flow manager initialized for domain: {domain}, session: {session.session_id}")
+    
+    @abstractmethod
+    def _configure_flow(self) -> None:
+        """Configure the flow stages, agents, and tasks for this domain"""
+        pass
+    
+    def add_agent_config(self, config: FlowAgentConfig) -> None:
+        """Add an agent configuration to the flow"""
+        self.agent_configs[config.stage] = config
+        if config.stage not in self.flow_stages:
+            self.flow_stages.append(config.stage)
+    
+    def add_task_config(self, config: FlowTaskConfig) -> None:
+        """Add a task configuration to the flow"""
+        self.task_configs[config.stage] = config
     
     def _initialize_agents(self) -> None:
-        """Initialize the specialized agents for different aspects of the conversation."""
-        # Agent for analyzing BI queries and determining if data is needed
-        self.query_analyzer = self._create_agent(
-            name="BI Query Analyzer",
-            role="Business Intelligence Query Analyzer",
-            goal="Analyze user queries to determine if they require BI data",
-            backstory="""You are a specialized BI query analyzer. Your job is to determine 
-                        if a user's query is related to business intelligence data and requires 
-                        accessing specific data for a complete response."""
-        )
-        
-        # Agent for determining response strategy
-        self.strategy_agent = self._create_agent(
-            name="Response Strategist",
-            role="Conversation Strategy Expert",
-            goal="Determine the optimal response strategy and format",
-            backstory="""You are an expert in communication strategy. Your job is to 
-                        analyze the conversation context and determine the most effective 
-                        way to structure and present the response."""
-        )
-        
-        # Agent for generating the final response
-        self.response_agent = self._create_agent(
-            name="Response Generator",
-            role="AI Assistant Response Generator",
-            goal="Generate clear, concise, and helpful responses",
-            backstory="""You are an expert in generating responses that communicate 
-                        complex information clearly. You can adapt your tone and style 
-                        based on the needs of the conversation."""
-        )
+        """Initialize agents based on configuration"""
+        self.agents = {}
+        for stage, config in self.agent_configs.items():
+            self.agents[stage] = self._create_agent(config)
     
-    def _create_agent(
-        self,
-        name: str,
-        role: str,
-        goal: str,
-        backstory: str
-    ) -> CrewAgent:
-        """
-        Create a CrewAI agent with specified parameters.
-        
-        Args:
-            name: Name of the agent
-            role: Role of the agent
-            goal: Goal of the agent
-            backstory: Backstory for the agent
-            
-        Returns:
-            A configured agent
-        """
+    def _create_agent(self, config: FlowAgentConfig) -> CrewAgent:
+        """Create a CrewAI agent from configuration"""
         return Agent(
-            name=name,
-            role=role,
-            goal=goal,
-            backstory=backstory,
+            name=config.name,
+            role=config.role,
+            goal=config.goal,
+            backstory=config.backstory,
+            tools=config.tools,
             verbose=True,
             allow_delegation=False,
             llm_model=self.llm_model,
@@ -107,7 +151,7 @@ class ChatFlowManager:
     
     def process_user_message(self, message: str) -> str:
         """
-        Process a user message through the full decision flow.
+        Process a user message through the configured flow.
         
         Args:
             message: The user's message
@@ -118,259 +162,124 @@ class ChatFlowManager:
         # Store the user message
         self.session.add_user_message(message)
         
-        # Step 1: Analyze if the message needs BI data
-        should_use_data, data_reasoning = self._analyze_data_needs(message)
+        # Process through each configured stage
+        for stage in self.flow_stages:
+            try:
+                decision = self._process_stage(stage, message)
+                self.decisions[stage] = decision
+                
+                # Store decision in session
+                self._store_decision(stage, decision)
+                
+            except Exception as e:
+                logger.error(f"Error processing stage {stage}: {e}")
+                # Continue with fallback decision
+                self.decisions[stage] = FlowDecision(
+                    stage.value, 
+                    self._get_fallback_decision(stage), 
+                    f"Fallback due to error: {e}",
+                    confidence=0.1
+                )
         
-        # Store the decision
-        self.session.store_bi_decision(
-            should_use_data=should_use_data,
-            reasoning=data_reasoning
-        )
-        
-        # Step 2: Determine appropriate response mode
-        response_mode, mode_reasoning = self._determine_response_mode(
-            message=message,
-            should_use_data=should_use_data
-        )
-        
-        # Store the decision
-        self.session.store_response_mode_decision(
-            response_mode=response_mode,
-            reasoning=mode_reasoning
-        )
-        
-        # Step 3: Generate the response
-        response = self._generate_response(
-            message=message,
-            should_use_data=should_use_data,
-            response_mode=response_mode
-        )
+        # Generate final response
+        response = self._generate_final_response(message)
         
         # Store the assistant's response
         self.session.add_assistant_message(response)
         
         return response
     
-    def _analyze_data_needs(self, message: str) -> Tuple[bool, str]:
-        """
-        Analyze if a message requires BI data to answer effectively.
+    def _process_stage(self, stage: FlowStage, message: str) -> FlowDecision:
+        """Process a single stage of the flow"""
+        if stage not in self.task_configs or stage not in self.agents:
+            raise ValueError(f"Stage {stage} not properly configured")
         
-        Args:
-            message: The user's message
-            
-        Returns:
-            A tuple of (should_use_data, reasoning)
-        """
-        # Get conversation history for context
-        history = self.session.get_message_history()
-        history_text = self._format_history(history)
+        task_config = self.task_configs[stage]
+        agent = self.agents[stage]
         
-        # Create a task for the query analyzer
-        from crewai import Task, Crew
-        
-        task = Task(
-            description=f"""
-            Analyze if the user query requires business intelligence data to answer effectively.
-            
-            User query: "{message}"
-            
-            Conversation history:
-            {history_text}
-            
-            Determine if this query:
-            1. Is asking for business metrics or insights
-            2. Requires specific data to answer accurately
-            3. References previous data points that should be referenced
-            
-            Respond with a clear YES or NO decision, followed by your reasoning.
-            """,
-            agent=self.query_analyzer,
-            expected_output="A decision (YES/NO) followed by reasoning"
+        # Create task from template
+        task_description = self._format_task_description(
+            task_config.description_template, 
+            message, 
+            stage
         )
         
-        # Create a temporary crew with the task
+        task = Task(
+            description=task_description,
+            agent=agent,
+            expected_output=task_config.expected_output
+        )
+        
+        # Execute task
         temp_crew = Crew(
-            agents=[self.query_analyzer],
+            agents=[agent],
             tasks=[task],
             verbose=False
         )
         
-        # Execute the task using the crew
-        try:
-            result = temp_crew.kickoff()
-            result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
-        except Exception as e:
-            logger.warning(f"Data needs analysis failed: {e}")
-            # Fallback to simple heuristic
-            data_keywords = ["sales", "revenue", "metrics", "numbers", "data", "report", "analytics"]
-            should_use_data = any(keyword in message.lower() for keyword in data_keywords)
-            reasoning = f"Fallback analysis: {'Use data' if should_use_data else 'No data needed'} based on keywords"
-            return should_use_data, reasoning
+        result = temp_crew.kickoff()
+        result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
         
-        # Parse the result
-        should_use_data = "yes" in result_text.lower().split("\n")[0].lower()
-        reasoning = "\n".join(result_text.split("\n")[1:]) if "\n" in result_text else "No specific reasoning provided."
+        # Parse result into decision
+        decision = task_config.decision_parser(result_text)
+        decision.decision_type = stage.value
         
-        logger.info(f"Data needs analysis: Use data? {should_use_data}")
-        return should_use_data, reasoning
+        logger.info(f"Stage {stage.value} completed: {decision.value}")
+        return decision
     
-    def _determine_response_mode(
-        self, 
-        message: str, 
-        should_use_data: bool
-    ) -> Tuple[str, str]:
-        """
-        Determine the appropriate response mode.
-        
-        Args:
-            message: The user's message
-            should_use_data: Whether to use BI data
-            
-        Returns:
-            A tuple of (response_mode, reasoning)
-        """
-        # Get conversation history for context
+    def _format_task_description(self, template: str, message: str, stage: FlowStage) -> str:
+        """Format task description with context"""
+        # Get conversation history
         history = self.session.get_message_history()
         history_text = self._format_history(history)
         
-        # Create a task for the strategy agent
-        from crewai import Task, Crew
+        # Get previous decisions
+        previous_decisions = {
+            k.value: v for k, v in self.decisions.items() 
+            if k != stage
+        }
+        decisions_text = self._format_decisions_dict(previous_decisions)
         
-        task = Task(
-            description=f"""
-            Determine the most effective response mode for the user query.
-            
-            User query: "{message}"
-            
-            Conversation history:
-            {history_text}
-            
-            Data usage decision: {"Will use BI data" if should_use_data else "Will not use BI data"}
-            
-            Choose one of the following response modes:
-            - ANALYTICAL: Structured, data-focused response with clear sections
-            - NARRATIVE: Story-based response that weaves data into a narrative
-            - CONVERSATIONAL: Friendly, direct response in a casual tone
-            - INSTRUCTIONAL: Step-by-step guidance or explanation
-            
-            Respond with the chosen mode (one word) followed by your reasoning.
-            """,
-            agent=self.strategy_agent,
-            expected_output="A response mode and reasoning"
+        # Get domain-specific context
+        domain_context = self._get_domain_context(message, stage)
+        context_text = self._format_context(domain_context)
+        
+        # Format template
+        return template.format(
+            message=message,
+            history=history_text,
+            decisions=decisions_text,
+            context=context_text,
+            domain=self.domain
         )
-        
-        # Create a temporary crew with the task
-        temp_crew = Crew(
-            agents=[self.strategy_agent],
-            tasks=[task],
-            verbose=False
-        )
-        
-        # Execute the task using the crew
-        try:
-            result = temp_crew.kickoff()
-            result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
-        except Exception as e:
-            logger.warning(f"Response mode determination failed: {e}")
-            # Fallback to conversational mode
-            return "conversational", "Fallback to conversational mode due to analysis failure"
-        
-        # Parse the result
-        mode_line = result_text.split("\n")[0].upper()
-        for mode in ["ANALYTICAL", "NARRATIVE", "CONVERSATIONAL", "INSTRUCTIONAL"]:
-            if mode in mode_line:
-                response_mode = mode.lower()
-                break
-        else:
-            # Default if we couldn't parse
-            response_mode = "conversational"
-        
-        reasoning = "\n".join(result_text.split("\n")[1:]) if "\n" in result_text else "No specific reasoning provided."
-        
-        logger.info(f"Response mode determination: {response_mode}")
-        return response_mode, reasoning
     
-    def _generate_response(
-        self, 
-        message: str, 
-        should_use_data: bool,
-        response_mode: str
-    ) -> str:
-        """
-        Generate the final response.
-        
-        Args:
-            message: The user's message
-            should_use_data: Whether to use BI data
-            response_mode: The response mode to use
-            
-        Returns:
-            The generated response
-        """
-        # Get conversation history for context
-        history = self.session.get_message_history()
-        history_text = self._format_history(history)
-        
-        # Retrieve relevant context if using data
-        context_items = []
-        if should_use_data:
-            context_items = self.session.get_context_for_query(
-                query=message,
-                context_types=["bi_data"]
+    @abstractmethod
+    def _get_domain_context(self, message: str, stage: FlowStage) -> List[Dict[str, Any]]:
+        """Get domain-specific context for the stage"""
+        pass
+    
+    @abstractmethod
+    def _generate_final_response(self, message: str) -> str:
+        """Generate the final response based on all decisions"""
+        pass
+    
+    @abstractmethod
+    def _get_fallback_decision(self, stage: FlowStage) -> Any:
+        """Get fallback decision for a stage when processing fails"""
+        pass
+    
+    def _store_decision(self, stage: FlowStage, decision: FlowDecision) -> None:
+        """Store decision in session"""
+        try:
+            self.session.store_flow_decision(
+                stage=stage.value,
+                decision_type=decision.decision_type,
+                value=decision.value,
+                reasoning=decision.reasoning,
+                confidence=decision.confidence
             )
-        
-        context_text = self._format_context(context_items)
-        
-        # Get recent decisions for context
-        decisions = self.session.get_recent_decisions(limit=3)
-        decisions_text = self._format_decisions(decisions)
-        
-        # Create a task for the response agent
-        from crewai import Task, Crew
-        
-        task = Task(
-            description=f"""
-            Generate a response to the user query based on the specified parameters.
-            
-            User query: "{message}"
-            
-            Conversation history:
-            {history_text}
-            
-            Response parameters:
-            - Data usage: {"Use available BI data" if should_use_data else "No specific BI data needed"}
-            - Response mode: {response_mode.upper()}
-            
-            Recent decisions:
-            {decisions_text}
-            
-            {"Relevant context and data:" if context_items else ""}
-            {context_text}
-            
-            Generate a helpful, clear response following the {response_mode} style.
-            """,
-            agent=self.response_agent,
-            expected_output="A complete response to the user query"
-        )
-        
-        # Create a temporary crew with the task
-        temp_crew = Crew(
-            agents=[self.response_agent],
-            tasks=[task],
-            verbose=False
-        )
-        
-        # Execute the task using the crew
-        try:
-            result = temp_crew.kickoff()
-            result_text = str(result.raw) if hasattr(result, 'raw') else str(result)
         except Exception as e:
-            logger.warning(f"Response generation failed: {e}")
-            # Fallback to simple response
-            return f"I understand you're asking about: {message}. Let me help you with that based on the available information."
-        
-        logger.info(f"Generated response in {response_mode} mode")
-        return result_text
+            logger.warning(f"Failed to store decision for stage {stage}: {e}")
     
     def _format_history(self, history: List[Dict[str, Any]]) -> str:
         """Format conversation history into a readable text."""
@@ -403,19 +312,168 @@ class ChatFlowManager:
         
         return "\n".join(formatted)
     
-    def _format_decisions(self, decisions: List[Dict[str, Any]]) -> str:
-        """Format decisions into a readable text."""
+    def _format_decisions_dict(self, decisions: Dict[str, FlowDecision]) -> str:
+        """Format decisions dictionary into readable text"""
         if not decisions:
-            return "No recent decisions available."
+            return "No previous decisions."
         
         formatted = []
-        for item in decisions:
-            decision_type = item.get('data', {}).get('decision_type', 'unknown')
-            description = item.get('data', {}).get('description', '')
-            reasoning = item.get('data', {}).get('reasoning', '')
-            
-            formatted.append(f"DECISION: {decision_type} - {description}")
-            formatted.append(f"REASONING: {reasoning}")
+        for stage, decision in decisions.items():
+            formatted.append(f"STAGE: {stage}")
+            formatted.append(f"DECISION: {decision.value}")
+            formatted.append(f"REASONING: {decision.reasoning}")
+            formatted.append(f"CONFIDENCE: {decision.confidence}")
             formatted.append("---")
         
-        return "\n".join(formatted) 
+        return "\n".join(formatted)
+    
+    def get_flow_summary(self) -> Dict[str, Any]:
+        """Get summary of the current flow state"""
+        return {
+            "domain": self.domain,
+            "stages": [stage.value for stage in self.flow_stages],
+            "decisions": {
+                stage.value: {
+                    "value": decision.value,
+                    "reasoning": decision.reasoning,
+                    "confidence": decision.confidence
+                }
+                for stage, decision in self.decisions.items()
+            },
+            "session_id": self.session.session_id
+        }
+
+
+class SimpleConversationalFlowManager(ChatFlowManagerBase):
+    """
+    Simple implementation for general conversational flow.
+    
+    This provides a basic flow suitable for general conversation
+    without domain-specific requirements.
+    """
+    
+    def _configure_flow(self) -> None:
+        """Configure a simple conversational flow"""
+        
+        # Analysis stage - understand the query
+        self.add_agent_config(FlowAgentConfig(
+            name="Query Analyzer",
+            role="Conversation Analyst",
+            goal="Understand the user's intent and requirements",
+            backstory=f"""You are an expert at understanding user queries in the {self.domain} domain. 
+                         Your job is to analyze what the user is asking for and determine the best approach.""",
+            stage=FlowStage.ANALYSIS
+        ))
+        
+        self.add_task_config(FlowTaskConfig(
+            stage=FlowStage.ANALYSIS,
+            description_template="""
+            Analyze the user's query to understand their intent and requirements.
+            
+            User query: "{message}"
+            
+            Conversation history:
+            {history}
+            
+            Domain context:
+            {context}
+            
+            Determine:
+            1. What is the user asking for?
+            2. What type of response would be most helpful?
+            3. What information or resources are needed?
+            
+            Respond with your analysis and recommended approach.
+            """,
+            expected_output="Analysis of user intent and recommended approach",
+            decision_parser=self._parse_analysis_decision
+        ))
+        
+        # Generation stage - create the response
+        self.add_agent_config(FlowAgentConfig(
+            name="Response Generator",
+            role="AI Assistant",
+            goal="Generate helpful and appropriate responses",
+            backstory=f"""You are a helpful AI assistant specializing in {self.domain}. 
+                         You provide clear, accurate, and engaging responses based on the analysis.""",
+            stage=FlowStage.GENERATION
+        ))
+        
+        self.add_task_config(FlowTaskConfig(
+            stage=FlowStage.GENERATION,
+            description_template="""
+            Generate a helpful response to the user's query based on the analysis.
+            
+            User query: "{message}"
+            
+            Analysis results:
+            {decisions}
+            
+            Conversation history:
+            {history}
+            
+            Domain context:
+            {context}
+            
+            Generate a clear, helpful response that addresses the user's needs.
+            """,
+            expected_output="A complete and helpful response to the user query",
+            decision_parser=self._parse_generation_decision
+        ))
+    
+    def _parse_analysis_decision(self, result: str) -> FlowDecision:
+        """Parse analysis result into decision"""
+        # Simple parsing - in practice this could be more sophisticated
+        intent = "general"
+        if "data" in result.lower() or "analysis" in result.lower():
+            intent = "data_request"
+        elif "help" in result.lower() or "how" in result.lower():
+            intent = "help_request"
+        elif "explain" in result.lower():
+            intent = "explanation_request"
+        
+        return FlowDecision("intent", intent, result)
+    
+    def _parse_generation_decision(self, result: str) -> FlowDecision:
+        """Parse generation result into decision"""
+        return FlowDecision("response", result, "Generated response")
+    
+    def _get_domain_context(self, message: str, stage: FlowStage) -> List[Dict[str, Any]]:
+        """Get domain context - override in domain-specific implementations"""
+        try:
+            # Try to get context from session if available
+            if hasattr(self.session, 'get_context_for_query'):
+                return self.session.get_context_for_query(
+                    query=message,
+                    context_types=["general"]
+                )
+        except:
+            pass
+        
+        return []
+    
+    def _generate_final_response(self, message: str) -> str:
+        """Generate final response from decisions"""
+        if FlowStage.GENERATION in self.decisions:
+            return self.decisions[FlowStage.GENERATION].value
+        else:
+            return f"I understand you're asking about: {message}. Let me help you with that."
+    
+    def _get_fallback_decision(self, stage: FlowStage) -> Any:
+        """Get fallback decision for failed stages"""
+        fallbacks = {
+            FlowStage.ANALYSIS: "general_query",
+            FlowStage.GENERATION: "I'm here to help. Could you please rephrase your question?"
+        }
+        return fallbacks.get(stage, "unknown")
+
+
+# Backward compatibility - create a simple flow manager by default
+class ChatFlowManager(SimpleConversationalFlowManager):
+    """
+    Default chat flow manager for backward compatibility.
+    
+    This provides the same interface as the original ChatFlowManager
+    but uses the new configurable architecture.
+    """
+    pass 
