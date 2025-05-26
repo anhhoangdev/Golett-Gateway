@@ -221,11 +221,30 @@ class VietnameseCubeJSChatbot:
         CUBEJS KNOWLEDGE CONTEXT:
         {general_knowledge}
         
-        CRITICAL QUERY FORMAT RULES (MUST FOLLOW):
+        CRITICAL TOOL USAGE RULES (MUST FOLLOW):
+        
+        🔧 BuildCubeQuery Tool Usage:
+        - Use individual parameters, NOT JSON strings
+        - Example: BuildCubeQuery(measures=["sales_metrics.total_revenue"], dimensions=["sales_metrics.sales_channel"])
+        - NOT: BuildCubeQuery("[measures: sales_metrics.total_revenue]")
+        
+        📊 Correct Tool Workflow:
+        1. BuildCubeQuery(measures=["cube.measure"], dimensions=["cube.dimension"])
+        2. ExecuteCubeQuery(query=<result_from_step_1>)
+        3. AnalyzeDataPoint(query_result=<result_from_step_2>)
+        
+        🚨 CRITICAL QUERY FORMAT RULES:
         1. Time dimensions MUST use "dimension" field: {{"dimension": "cube.field", "granularity": "month"}}
         2. Filters MUST use "member" field: {{"member": "cube.field", "operator": "equals", "values": ["value"]}}
         3. Always use cube prefixes: "cube_name.field_name"
         4. When queries fail, use your knowledge fallback to understand and fix errors
+        
+        TOOL PARAMETER EXAMPLES:
+        - measures: ["sales_metrics.total_revenue", "sales_metrics.total_orders"]
+        - dimensions: ["sales_metrics.sales_channel"]
+        - time_dimensions: [{{"dimension": "sales_metrics.created_at", "granularity": "month"}}]
+        - filters: [{{"member": "sales_metrics.sales_channel", "operator": "equals", "values": ["online"]}}]
+        - limit: 10
         
         GOLETT MEMORY USAGE:
         - Store important business insights in long-term memory
@@ -275,6 +294,13 @@ class VietnameseCubeJSChatbot:
             - Measures: executive_dashboard.total_daily_revenue, executive_dashboard.total_costs, executive_dashboard.operational_efficiency, executive_dashboard.cash_flow_ratio
             - Dimensions: executive_dashboard.report_date (time), executive_dashboard.company_name, executive_dashboard.department_type
 
+            ❌ DATA NOT AVAILABLE:
+            - Supplier information (nhà cung cấp)
+            - Delivery performance ratings (đánh giá hiệu suất giao hàng)
+            - Individual customer details
+            - Product-level inventory
+            - Detailed transaction records
+
             QUERY STRATEGY FOR COMPLEX QUESTIONS:
             - Revenue + Production efficiency → Query sales_metrics THEN production_metrics separately
             - Company performance → Query executive_dashboard OR multiple cubes separately
@@ -288,6 +314,7 @@ class VietnameseCubeJSChatbot:
             4. Use appropriate cube based on question topic
             5. For time dimensions, use "created_at" for most cubes, "report_date" for executive_dashboard
             6. Available time granularities: day, week, month, quarter, year
+            7. If asked about unavailable data, explain what IS available and suggest alternatives
         """
     
     def _get_cubejs_knowledge_context(self, query: str) -> str:

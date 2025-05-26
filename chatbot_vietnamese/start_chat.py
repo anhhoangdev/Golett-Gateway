@@ -4,13 +4,7 @@ Interactive Vietnamese Business Intelligence Chatbot Launcher
 """
 
 import os
-import sys
-
-# Add project root to path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
-
-from chatbot_vietnamese.core.vietnamese_chatbot import VietnameseCubeJSChatbot
+from chatbot_vietnamese.core.vietnamese_chatbot_refactored import RefactoredVietnameseCubeJSChatbot
 
 def main():
     """Launch the interactive Vietnamese chatbot with proper Golett integration"""
@@ -45,7 +39,7 @@ def main():
         print("\n🔧 Initializing Vietnamese chatbot with Golett memory system...")
         
         # Initialize chatbot with proper Golett integration
-        chatbot = VietnameseCubeJSChatbot(
+        chatbot = RefactoredVietnameseCubeJSChatbot(
             postgres_connection=postgres_connection,
             qdrant_url=qdrant_url,
             cubejs_api_url=cubejs_api_url,

@@ -8,12 +8,10 @@ nông nghiệp thông qua CubeJS REST API.
 
 __version__ = "1.0.0"
 
-from .farm_chatbot import FarmVietnameseChatbot
 from .core.query_mapper import CubeJSQueryMapper
 from .core.knowledge_base import FarmKnowledgeBase
 
 __all__ = [
-    "FarmVietnameseChatbot",
     "CubeJSQueryMapper", 
     "FarmKnowledgeBase"
 ] 
