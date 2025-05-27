@@ -5,7 +5,7 @@ from crewai import Crew, Agent, Task
 from crewai.agent import Agent as CrewAgent
 
 from golett.chat.session import ChatSession
-from golett.chat.crew import GolettKnowledgeAdapter
+from golett.crew.crew import GolettKnowledgeAdapter
 from golett.memory.memory_manager import MemoryManager
 from golett.memory.contextual.context_manager import ContextManager
 from golett.memory.session.session_manager import SessionManager

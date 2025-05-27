@@ -10,6 +10,7 @@ from crewai import Task, Agent
 from golett.memory.memory_manager import MemoryManager, MemoryLayer
 from golett.memory.contextual.context_manager import ContextManager
 from golett.utils.logger import get_logger
+import json
 
 logger = get_logger(__name__)
 
@@ -236,6 +237,27 @@ Answer this Vietnamese business question: "{self.question}"
 ENHANCED GOLETT CONTEXT:
 {formatted_context}
 
+🚨 MANDATORY TOOL USAGE REQUIREMENTS (ABSOLUTELY REQUIRED):
+
+YOU MUST USE THE FOLLOWING TOOLS IN THIS EXACT ORDER:
+1. BuildCubeQuery - MANDATORY to build the query
+2. ExecuteCubeQuery - MANDATORY to get actual data
+3. AnalyzeDataPoint - MANDATORY to analyze the results
+
+🚫 STRICTLY FORBIDDEN:
+- Answering without using tools
+- Making up data or numbers
+- Providing generic responses
+- Hallucinating business insights
+- Returning responses like "Tôi đã tổng hợp và phân tích..." without actual data
+
+✅ VALIDATION CHECKLIST (YOU MUST VERIFY):
+- Did I use BuildCubeQuery to create a proper query?
+- Did I use ExecuteCubeQuery to get real data from the API?
+- Did I use AnalyzeDataPoint to analyze the actual results?
+- Do I have real numbers and data points in my response?
+- Am I providing specific insights based on actual data?
+
 CRITICAL CUBEJS QUERY LIMITATIONS & RULES (MUST FOLLOW):
 
 🚨 SINGLE CUBE LIMITATION:
@@ -249,20 +271,53 @@ QUERY FORMAT RULES:
 3. Always use cube prefixes: "cube_name.field_name"
 4. Available time granularities: day, week, month, quarter, year
 
-INSTRUCTIONS:
+🚨 CRITICAL OUTPUT REQUIREMENTS (MUST FOLLOW):
+- DO NOT return raw tool outputs or JSON data
+- DO NOT return query objects or technical data structures
+- ALWAYS process tool results into human-readable Vietnamese summaries
+- ALWAYS provide business insights and analysis in Vietnamese
+- ALWAYS explain what the data means for the business
+- ALWAYS include specific numbers and data points from the actual query results
+
+MANDATORY STEP-BY-STEP PROCESS (NO SHORTCUTS ALLOWED):
 1. Use Golett's enhanced context to understand the business question better
 2. Identify which cube(s) contain the data you need
-3. For EACH cube, use BuildCubeQuery to create a separate query
-4. Use ExecuteCubeQuery to get data from each cube separately
-5. Use AnalyzeDataPoint to analyze each result
-6. Combine insights from multiple cubes in your final answer
-7. Reference relevant business intelligence context from Golett memory
-8. Store important insights back to Golett memory for future reference
-9. Provide a comprehensive answer in Vietnamese
+3. For EACH cube, use BuildCubeQuery to create a separate query (MANDATORY)
+4. Use ExecuteCubeQuery to get data from each cube separately (MANDATORY)
+5. Use AnalyzeDataPoint to analyze each result (MANDATORY)
+6. **MOST IMPORTANT**: Process ALL tool outputs into a comprehensive Vietnamese business analysis
+7. Combine insights from multiple cubes in your final answer
+8. Reference relevant business intelligence context from Golett memory
+9. Store important insights back to Golett memory for future reference
 
-Remember: Leverage Golett's context for intelligent, context-aware responses!
+REQUIRED OUTPUT FORMAT (MUST INCLUDE ACTUAL DATA):
+📊 **Phân tích dữ liệu kinh doanh:**
+[Provide Vietnamese summary of the ACTUAL data findings with specific numbers]
+
+💡 **Insights và nhận định:**
+[Provide business insights based on REAL data and what the data means]
+
+📈 **Khuyến nghị:**
+[Provide actionable recommendations based on ACTUAL analysis results]
+
+🔍 **Dữ liệu cụ thể:**
+[Include specific data points, numbers, and metrics from the query results]
+
+FINAL VALIDATION BEFORE RESPONDING:
+- Can I point to specific numbers in my response that came from the tools?
+- Did I actually execute queries and get real data?
+- Am I providing insights based on actual analysis, not generic statements?
+- Would someone reading this know exactly what data I found?
+
+Remember: 
+- TOOL USAGE IS MANDATORY - NO EXCEPTIONS
+- NEVER return raw tool data or JSON objects
+- ALWAYS provide Vietnamese business analysis and insights
+- ALWAYS explain the business meaning of the data
+- ALWAYS include specific data points and numbers from actual queries
+- Leverage Golett's context for intelligent, context-aware responses!
             """,
-            expected_output="Comprehensive Vietnamese answer with data analysis and Golett memory context integration",
+            expected_output="Comprehensive Vietnamese business analysis with insights and recommendations based on ACTUAL data from mandatory tool usage (NO raw tool data or JSON, NO generic responses without real data)",
             agent=self.agent
         )
     
@@ -270,10 +325,51 @@ Remember: Leverage Golett's context for intelligent, context-aware responses!
         """Format enhanced context from Golett with semantic memory retrieval"""
         context_parts = []
         
-        # BI Context (existing)
+        # Enhanced SHORT-TERM Context with semantic search results
+        short_term_summaries = self.enhanced_context.get("short_term_summaries", [])
+        if short_term_summaries:
+            context_parts.append("📊 ENHANCED SHORT-TERM BUSINESS INTELLIGENCE (Semantic Search):")
+            for summary in short_term_summaries[:3]:
+                content = str(summary.get("content", ""))[:200]
+                summary_type = summary.get("summary_type", "unknown")
+                similarity = summary.get("similarity_score", 0.0)
+                relevance = summary.get("relevance_reason", "")
+                search_method = summary.get("search_method", "unknown")
+                
+                # Show semantic search quality
+                quality_emoji = "🎯" if similarity > 0.7 else "🔍" if similarity > 0.5 else "📝"
+                context_parts.append(f"- {quality_emoji} [{summary_type}] (Similarity: {similarity:.2f}): {content}")
+                if relevance:
+                    context_parts.append(f"  └─ Why relevant: {relevance}")
+                context_parts.append(f"  └─ Search: {search_method}")
+        
+        # Enhanced LONG-TERM Context with cross-session insights
+        long_term_insights = self.enhanced_context.get("long_term_insights", [])
+        if long_term_insights:
+            context_parts.append("\n🧠 ENHANCED LONG-TERM INSIGHTS (Cross-Session Semantic Search):")
+            for insight in long_term_insights[:2]:
+                content = str(insight.get("content", ""))[:200]
+                insight_type = insight.get("insight_type", "unknown")
+                similarity = insight.get("similarity_score", 0.0)
+                cross_session = insight.get("cross_session", False)
+                relevance = insight.get("relevance_reason", "")
+                domain = insight.get("domain", "unknown")
+                
+                # Show cross-session and quality indicators
+                session_emoji = "🔄" if cross_session else "📍"
+                quality_emoji = "🎯" if similarity > 0.7 else "🔍" if similarity > 0.5 else "📝"
+                context_parts.append(f"- {session_emoji}{quality_emoji} [{insight_type}] (Similarity: {similarity:.2f}): {content}")
+                if domain != "unknown":
+                    context_parts.append(f"  └─ Domain: {domain}")
+                if relevance:
+                    context_parts.append(f"  └─ Why relevant: {relevance}")
+                if cross_session:
+                    context_parts.append(f"  └─ Source: Cross-session insight")
+        
+        # BI Context (existing - for backward compatibility)
         bi_context = self.enhanced_context.get("bi_context", [])
         if bi_context:
-            context_parts.append("📊 RELEVANT BUSINESS INTELLIGENCE FROM GOLETT:")
+            context_parts.append("\n📊 RELEVANT BUSINESS INTELLIGENCE FROM GOLETT:")
             for item in bi_context[:3]:
                 data = str(item.get("data", ""))[:200]
                 description = item.get("metadata", {}).get("description", "")
@@ -287,37 +383,6 @@ Remember: Leverage Golett's context for intelligent, context-aware responses!
                 content = str(item.get("content", item.get("data", "")))[:300]
                 context_parts.append(f"- {content}")
         
-        # NEW: Semantic Memories from Qdrant
-        semantic_memories = self.enhanced_context.get("semantic_memories", [])
-        if semantic_memories:
-            context_parts.append("\n🧠 SEMANTIC MEMORIES FROM QDRANT (Similar Past Interactions):")
-            for memory in semantic_memories[:3]:
-                content = str(memory.get("content", ""))[:250]
-                similarity = memory.get("similarity_score", 0.0)
-                layer = memory.get("memory_layer", "unknown")
-                timestamp = memory.get("timestamp", "")[:10]  # Just date
-                context_parts.append(f"- [{layer}] ({similarity:.2f} similarity, {timestamp}): {content}")
-        
-        # NEW: Cross-Session Business Insights
-        cross_session_insights = self.enhanced_context.get("cross_session_insights", [])
-        if cross_session_insights:
-            context_parts.append("\n🔄 CROSS-SESSION BUSINESS INSIGHTS:")
-            for insight in cross_session_insights[:2]:
-                insight_text = str(insight.get("insight", ""))[:200]
-                importance = insight.get("importance", 0.0)
-                source_session = insight.get("source_session", "unknown")[:8]  # Short session ID
-                context_parts.append(f"- [Session: {source_session}] (Importance: {importance:.1f}): {insight_text}")
-        
-        # NEW: Related Conversation Summaries
-        related_summaries = self.enhanced_context.get("related_summaries", [])
-        if related_summaries:
-            context_parts.append("\n💬 RELATED PAST CONVERSATIONS:")
-            for summary in related_summaries[:2]:
-                summary_text = str(summary.get("summary", ""))[:200]
-                topics = summary.get("topics", [])
-                topics_str = ", ".join(topics[:3]) if topics else "general"
-                context_parts.append(f"- Topics: [{topics_str}]: {summary_text}")
-        
         # Recent Conversation Context (enhanced)
         recent_conversation = self.enhanced_context.get("recent_conversation", [])
         if recent_conversation:
@@ -326,6 +391,24 @@ Remember: Leverage Golett's context for intelligent, context-aware responses!
                 role = msg.get("metadata", {}).get("role", "unknown")
                 content = str(msg.get("data", ""))[:150]
                 context_parts.append(f"- {role.upper()}: {content}")
+        
+        # Add semantic search metadata summary
+        retrieval_metadata = self.enhanced_context.get("retrieval_metadata", {})
+        if retrieval_metadata:
+            context_parts.append(f"\n🔍 SEMANTIC SEARCH SUMMARY:")
+            context_parts.append(f"- Strategy: {retrieval_metadata.get('strategy', 'unknown')}")
+            context_parts.append(f"- Used Short-term: {retrieval_metadata.get('used_short_term', False)}")
+            context_parts.append(f"- Used Long-term: {retrieval_metadata.get('used_long_term', False)}")
+            
+            # Calculate average similarity if available
+            if short_term_summaries:
+                avg_short_sim = sum(s.get("similarity_score", 0.0) for s in short_term_summaries) / len(short_term_summaries)
+                context_parts.append(f"- Short-term avg similarity: {avg_short_sim:.2f}")
+            if long_term_insights:
+                avg_long_sim = sum(i.get("similarity_score", 0.0) for i in long_term_insights) / len(long_term_insights)
+                cross_session_count = sum(1 for i in long_term_insights if i.get("cross_session", False))
+                context_parts.append(f"- Long-term avg similarity: {avg_long_sim:.2f}")
+                context_parts.append(f"- Cross-session insights: {cross_session_count}/{len(long_term_insights)}")
         
         return "\n".join(context_parts) if context_parts else "No enhanced context available."
 
@@ -358,55 +441,128 @@ class FollowUpTask:
             description=f"""
 Answer this Vietnamese follow-up question: "{self.question}"
 
-ENHANCED GOLETT CONTEXT FOR FOLLOW-UP:
+IN-MEMORY SESSION CONTEXT FOR FOLLOW-UP:
 {formatted_context}
 
-INSTRUCTIONS:
-1. Use Golett's enhanced context to understand the follow-up question in relation to previous conversation
-2. Reference previous data analysis results stored in Golett memory
-3. Provide additional insights based on business intelligence context
-4. If the follow-up requires new data analysis, suggest asking a more specific question
-5. Be conversational and helpful while leveraging Golett's memory capabilities
-6. Reference cross-session knowledge when relevant
+FOLLOW-UP PROCESSING INSTRUCTIONS:
+1. Use ONLY the in-memory context from the current session - no cross-session data
+2. Search within the current conversation for relevant information
+3. Reference previous messages and responses from this session
+4. Build upon the immediate conversation context
+5. If the follow-up asks for more details, elaborate on previous responses
+6. If the follow-up asks for clarification, explain previous answers more clearly
+7. Stay focused on the current session's conversation flow
+8. Do not retrieve information from other sessions or long-term memory
 
-Answer in Vietnamese with context-aware insights from Golett memory.
+FOLLOW-UP RESPONSE GUIDELINES:
+- Be conversational and reference the immediate context
+- Provide the additional details or clarification requested
+- If previous data analysis was mentioned, elaborate on those specific results
+- If no relevant context is found in current session, ask for clarification
+- Keep responses focused on the current conversation thread
+
+Answer in Vietnamese with context-aware insights from the current session only.
 """,
             agent=self.agent,
-            expected_output="A helpful Vietnamese response to the follow-up question with Golett context integration"
+            expected_output="A helpful Vietnamese response to the follow-up question using only current session context"
         )
     
     def _format_follow_up_context(self) -> str:
-        """Format context specifically for follow-up questions with semantic memory"""
+        """Format enhanced follow-up context with semantic search results"""
         context_parts = []
         
-        # Recent conversation with more detail for follow-ups
+        # Enhanced SHORT-TERM Context for follow-up
+        short_term_summaries = self.enhanced_context.get("short_term_summaries", [])
+        if short_term_summaries:
+            context_parts.append("🔄 ENHANCED SHORT-TERM FOLLOW-UP CONTEXT (Semantic Search):")
+            for summary in short_term_summaries[:3]:
+                content = str(summary.get("content", ""))[:200]
+                summary_type = summary.get("summary_type", "unknown")
+                similarity = summary.get("similarity_score", 0.0)
+                relevance = summary.get("relevance_reason", "")
+                search_method = summary.get("search_method", "unknown")
+                
+                # Show semantic search quality for follow-up
+                quality_emoji = "🎯" if similarity > 0.7 else "🔍" if similarity > 0.5 else "📝"
+                context_parts.append(f"- {quality_emoji} [{summary_type}] (Similarity: {similarity:.2f}): {content}")
+                if relevance:
+                    context_parts.append(f"  └─ Follow-up relevance: {relevance}")
+                context_parts.append(f"  └─ Search method: {search_method}")
+        
+        # Enhanced LONG-TERM Context for historical follow-up patterns
+        long_term_insights = self.enhanced_context.get("long_term_insights", [])
+        if long_term_insights:
+            context_parts.append("\n🧠 ENHANCED LONG-TERM FOLLOW-UP PATTERNS (Cross-Session):")
+            for insight in long_term_insights[:2]:
+                content = str(insight.get("content", ""))[:200]
+                insight_type = insight.get("insight_type", "unknown")
+                similarity = insight.get("similarity_score", 0.0)
+                cross_session = insight.get("cross_session", False)
+                relevance = insight.get("relevance_reason", "")
+                domain = insight.get("domain", "unknown")
+                
+                # Show cross-session follow-up patterns
+                session_emoji = "🔄" if cross_session else "📍"
+                quality_emoji = "🎯" if similarity > 0.7 else "🔍" if similarity > 0.5 else "📝"
+                context_parts.append(f"- {session_emoji}{quality_emoji} [{insight_type}] (Similarity: {similarity:.2f}): {content}")
+                if domain != "unknown":
+                    context_parts.append(f"  └─ Domain: {domain}")
+                if relevance:
+                    context_parts.append(f"  └─ Follow-up pattern: {relevance}")
+                if cross_session:
+                    context_parts.append(f"  └─ Historical pattern from previous sessions")
+        
+        # Enhanced session search results with semantic scoring
+        session_search_results = self.enhanced_context.get("session_search_results", [])
+        if session_search_results:
+            context_parts.append("\n🔍 ENHANCED SESSION SEARCH RESULTS (Semantic Follow-up Search):")
+            for result in session_search_results:
+                content = str(result.get("content", ""))[:200]
+                similarity = result.get("similarity_score", 0.0)
+                search_method = result.get("search_method", "unknown")
+                relevance = result.get("relevance_reason", "")
+                timestamp = result.get("timestamp", "")[:16] if result.get("timestamp") else ""
+                
+                # Show semantic search quality for session results
+                quality_emoji = "🎯" if similarity > 0.7 else "🔍" if similarity > 0.5 else "📝"
+                context_parts.append(f"- {quality_emoji} (Similarity: {similarity:.2f}) [{timestamp}]: {content}")
+                if relevance:
+                    context_parts.append(f"  └─ Why relevant for follow-up: {relevance}")
+                context_parts.append(f"  └─ Found via: {search_method}")
+        
+        # Recent conversation context (enhanced)
         recent_conversation = self.enhanced_context.get("recent_conversation", [])
         if recent_conversation:
-            context_parts.append("💭 RECENT CONVERSATION FROM CURRENT SESSION:")
-            for msg in recent_conversation[-5:]:  # More context for follow-ups
+            context_parts.append("\n💭 RECENT CONVERSATION CONTEXT:")
+            for msg in recent_conversation[-4:]:
                 role = msg.get("metadata", {}).get("role", "unknown")
-                content = str(msg.get("data", ""))[:250]  # More content for follow-ups
-                context_parts.append(f"- {role.upper()}: {content}")
+                content = str(msg.get("data", ""))[:150]
+                timestamp = msg.get("metadata", {}).get("timestamp", "")[:16] if msg.get("metadata", {}).get("timestamp") else ""
+                context_parts.append(f"- [{timestamp}] {role.upper()}: {content}")
         
-        # Semantic memories focused on recent interactions
-        semantic_memories = self.enhanced_context.get("semantic_memories", [])
-        if semantic_memories:
-            context_parts.append("\n🧠 RELATED MEMORIES FROM RECENT SESSIONS:")
-            for memory in semantic_memories[:3]:
-                content = str(memory.get("content", ""))[:200]
-                similarity = memory.get("similarity_score", 0.0)
-                layer = memory.get("memory_layer", "unknown")
-                context_parts.append(f"- [{layer}] ({similarity:.2f} similarity): {content}")
+        # Add semantic follow-up search metadata
+        retrieval_metadata = self.enhanced_context.get("retrieval_metadata", {})
+        if retrieval_metadata:
+            context_parts.append(f"\n🔍 SEMANTIC FOLLOW-UP SEARCH SUMMARY:")
+            context_parts.append(f"- Strategy: {retrieval_metadata.get('strategy', 'unknown')}")
+            context_parts.append(f"- Conversation type: {retrieval_metadata.get('conversation_type', 'unknown')}")
+            context_parts.append(f"- Used Short-term: {retrieval_metadata.get('used_short_term', False)}")
+            context_parts.append(f"- Used Long-term: {retrieval_metadata.get('used_long_term', False)}")
+            
+            # Calculate follow-up specific similarity metrics
+            if short_term_summaries:
+                avg_short_sim = sum(s.get("similarity_score", 0.0) for s in short_term_summaries) / len(short_term_summaries)
+                context_parts.append(f"- Short-term follow-up similarity: {avg_short_sim:.2f}")
+            if long_term_insights:
+                avg_long_sim = sum(i.get("similarity_score", 0.0) for i in long_term_insights) / len(long_term_insights)
+                cross_session_count = sum(1 for i in long_term_insights if i.get("cross_session", False))
+                context_parts.append(f"- Long-term follow-up similarity: {avg_long_sim:.2f}")
+                context_parts.append(f"- Cross-session follow-up patterns: {cross_session_count}/{len(long_term_insights)}")
+            if session_search_results:
+                avg_session_sim = sum(r.get("similarity_score", 0.0) for r in session_search_results) / len(session_search_results)
+                context_parts.append(f"- Session search similarity: {avg_session_sim:.2f}")
         
-        # BI Context for reference
-        bi_context = self.enhanced_context.get("bi_context", [])
-        if bi_context:
-            context_parts.append("\n📊 RELATED BUSINESS INSIGHTS:")
-            for item in bi_context[:2]:
-                data = str(item.get("data", ""))[:200]
-                context_parts.append(f"- {data}")
-        
-        return "\n".join(context_parts) if context_parts else "No follow-up context available."
+        return "\n".join(context_parts) if context_parts else "No enhanced follow-up context available."
 
 
 class ConversationalTask:

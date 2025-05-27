@@ -12,9 +12,9 @@ __version__ = "0.1.0"
 from golett.memory.memory_manager import MemoryManager
 from golett.chat.session import ChatSession
 from golett.chat.flow import ChatFlowManager
-from golett.chat.crew import GolettKnowledgeAdapter
-from golett.chat.crew_session import CrewChatSession
-from golett.chat.crew_flow import CrewChatFlowManager
+from golett.crew.crew import GolettKnowledgeAdapter
+from golett.crew.crew_session import CrewChatSession
+from golett.crew.crew_flow import CrewChatFlowManager
 from golett.knowledge.sources import GolettTextFileKnowledgeSource, GolettMemoryKnowledgeSource
 
 __all__ = [
