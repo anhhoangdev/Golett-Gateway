@@ -459,7 +459,7 @@ class RefactoredVietnameseCubeJSChatbot:
             classification = str(result).strip().lower()
             
             # Validate classification result
-            valid_types = ["data_analysis", "follow_up", "conversational", "clarification"]
+            valid_types = ["data_analysis", "follow_up_data_analysis", "follow_up", "conversational", "clarification"]
             if classification in valid_types:
                 return classification
             else:
@@ -477,6 +477,9 @@ class RefactoredVietnameseCubeJSChatbot:
         try:
             if conversation_type == "data_analysis":
                 return self._process_data_analysis(question, enhanced_context)
+            
+            elif conversation_type == "follow_up_data_analysis":
+                return self._process_follow_up_data_analysis(question, enhanced_context)
             
             elif conversation_type == "follow_up":
                 return self._process_follow_up(question, enhanced_context)
@@ -518,6 +521,33 @@ class RefactoredVietnameseCubeJSChatbot:
         except Exception as e:
             logger.error(f"Error in data analysis processing: {e}")
             return f"❌ Lỗi khi phân tích dữ liệu: {str(e)}"
+    
+    def _process_follow_up_data_analysis(self, question: str, enhanced_context: Dict[str, Any]) -> str:
+        """Process follow-up data analysis questions using the data analyst agent"""
+        try:
+            print("📊 Processing as follow-up data analysis question...")
+            
+            # Create follow-up data analysis task using task factory
+            follow_up_data_analysis_task = self.task_factory.create_follow_up_data_analysis_task(
+                question=question,
+                agent=self.data_analyst_agent_class.agent,
+                enhanced_context=enhanced_context
+            )
+            
+            # Execute the follow-up data analysis task
+            from crewai import Crew
+            follow_up_data_analysis_crew = Crew(
+                agents=[self.data_analyst_agent_class.agent],
+                tasks=[follow_up_data_analysis_task],
+                verbose=True
+            )
+            
+            result = follow_up_data_analysis_crew.kickoff()
+            return str(result)
+            
+        except Exception as e:
+            logger.error(f"Error in follow-up data analysis processing: {e}")
+            return f"❌ Lỗi khi xử lý câu hỏi tiếp theo: {str(e)}"
     
     def _process_follow_up(self, question: str, enhanced_context: Dict[str, Any]) -> str:
         """Process follow-up questions using the follow-up agent"""
@@ -676,6 +706,7 @@ class RefactoredVietnameseCubeJSChatbot:
         # Use short-term memory for data analysis and explanations
         short_term_types = [
             "data_analysis", 
+            "follow_up_data_analysis",  # New type should use short-term memory
             "explanation",
             "clarification"
         ]
@@ -699,6 +730,7 @@ class RefactoredVietnameseCubeJSChatbot:
         # Use long-term memory for complex analysis and knowledge questions
         long_term_types = [
             "data_analysis",
+            "follow_up_data_analysis",  # New type should use long-term memory
             "explanation"
         ]
         

@@ -86,12 +86,20 @@ class VietnameseDataAnalystAgent:
         - You CANNOT say things like "Tôi đã phân tích dữ liệu" without actually using tools
         - If you don't use tools, your response is INVALID and UNACCEPTABLE
         
+        🔄 CRITICAL FOLLOW-UP DATA ANALYSIS RULES:
+        - Decide wether they want MORE DATA, not explanations
+        - Follow-up questions like "tìm cho tôi thêm thông tin" require ACTUAL DATA QUERIES
+        - Don't provide generic definitions when users want specific data breakdowns
+        - If previous analysis showed "125 hợp đồng", and user asks for breakdown by type - QUERY THE DATA
+        - Always continue the data analysis thread with REAL QUERIES, not generic responses
+        
         CRITICAL CAPABILITIES:
         1. 🧠 GOLETT MEMORY: You have access to Golett's three-layer memory system (long-term, short-term, in-session)
         2. 📊 CUBEJS EXPERTISE: You understand CubeJS query format and can build proper queries
         3. 🔍 KNOWLEDGE SOURCES: You have access to CubeJS documentation through Golett knowledge system
         4. 🇻🇳 VIETNAMESE FLUENCY: You respond naturally in Vietnamese for business contexts
         5. 🎯 CONTEXT AWARENESS: You leverage Golett's context manager for intelligent context retrieval
+        6. 🔄 FOLLOW-UP INTELLIGENCE: You detect when follow-ups require continued data analysis vs explanations
         
         🚨 MANDATORY TOOL USAGE PROTOCOL:
         For EVERY data analysis question, you MUST:
@@ -293,7 +301,24 @@ class VietnameseFollowUpAgent:
             - Business intelligence insights stored in memory layers
             - Cross-session knowledge when relevant
             
-            You can reference previous data analysis results and provide additional insights using Golett's context manager.""",
+            🔄 CRITICAL FOLLOW-UP INTELLIGENCE:
+            You can detect when follow-up questions require:
+            1. CONTINUED DATA ANALYSIS (chi tiết hơn, cụ thể, phân loại, theo từng loại) - These need ACTUAL DATA QUERIES
+            2. EXPLANATIONS (tại sao, như thế nào, nghĩa là gì) - These need clarifications
+            3. CONVERSATIONAL RESPONSES (cảm ơn, ok, hiểu rồi) - These need acknowledgments
+            
+            🚨 CRITICAL: When users ask for "chi tiết hơn", "cụ thể", "phân loại", "theo từng loại" after data analysis:
+            - They want MORE DATA, not generic explanations
+            - You should guide them to ask for specific data analysis
+            - Reference the previous data analysis results from memory
+            - Suggest specific data breakdowns they might want
+            
+            🎯 ENHANCED FOLLOW-UP CAPABILITIES:
+            - Reference previous data analysis results and provide additional insights using Golett's context manager
+            - Detect when follow-ups need data analysis continuation vs explanations
+            - Guide users to ask for specific data when they want detailed breakdowns
+            - Use in-memory conversation context as primary source for understanding follow-up intent
+            - Supplement with semantic search results for broader context""",
             verbose=True,
             allow_delegation=False,
             tools=[]
