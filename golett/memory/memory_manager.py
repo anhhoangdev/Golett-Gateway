@@ -70,7 +70,7 @@ class MemoryManager:
             MemoryLayer.SHORT_TERM: {
                 "retention_days": 30,
                 "importance_threshold": 0.5,
-                "cross_session": False,
+                "cross_session": True,
                 "priority": "medium", 
                 "cleanup_frequency": "daily"
             },

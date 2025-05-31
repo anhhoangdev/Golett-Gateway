@@ -36,6 +36,7 @@ from crewai import Agent, Task, Crew, Process
 # Golett core imports - updated to use crew system
 from golett.memory.memory_manager import MemoryManager, MemoryLayer
 from golett.memory.session.session_manager import SessionManager
+from golett.memory.contextual.context_manager import ContextManager
 from golett.memory.contextual.enhanced_context_manager import EnhancedContextManager, ContextRetrievalStrategy
 from golett.crew.crew_session import CrewChatSession
 from golett.crew.crew_flow import CrewChatFlowManager
@@ -282,7 +283,6 @@ class RefactoredVietnameseCubeJSChatbot:
         knowledge_context = self._get_cubejs_context("CubeJS knowledge")
         
         # Initialize context manager for agents
-        from golett.memory.contextual.context_manager import ContextManager
         context_manager = ContextManager(self.memory_manager)
         
         # 1. Data Analyst Agent
