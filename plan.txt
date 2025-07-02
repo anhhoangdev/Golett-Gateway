@@ -1,0 +1,8 @@
+1. Understand the User's Intent.
+2. Define System Identity/Branding.
+3. Create Variants of the Response.
+4. Implement Personalization.
+5. Integrate Response in Code.
+6. Test the Implementation.
+7. Monitor and Iterate.
+8. Document the Process.

@@ -1,189 +1,65 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  # PostgreSQL Database for structured data storage
   postgres:
-    image: postgres:15-alpine
-    container_name: golett-postgres
+    image: postgres:15
+    restart: unless-stopped
     environment:
+      POSTGRES_USER: golett
+      POSTGRES_PASSWORD: golettpass
       POSTGRES_DB: golett_db
-      POSTGRES_USER: golett_user
-      POSTGRES_PASSWORD: golett_password
-      POSTGRES_HOST_AUTH_METHOD: trust
-      POSTGRES_MULTIPLE_DATABASES: golett_db,farm_data
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-golett-init.sql
-      - ./farm_data/docker/init-scripts/01-create-multiple-databases.sh:/docker-entrypoint-initdb.d/00-create-databases.sh
-      - ./farm_data/create_database_schema.sql:/docker-entrypoint-initdb.d/02-farm-schema.sql
-    networks:
-      - golett-network
-    restart: unless-stopped
+      - pgdata:/var/lib/postgresql/data
+      # Optional: pre-create schema with migrations
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U golett_user -d postgres"]
-      interval: 10s
+      test: ["CMD-SHELL", "pg_isready -U golett -d golett_db"]
+      interval: 5s
       timeout: 5s
       retries: 5
 
-  # Qdrant Vector Database for semantic search
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: golett-qdrant
+    restart: unless-stopped
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "6333:6333"  # REST + gRPC (HTTP/1.1)
+      - "6334:6334"  # Web UI
     volumes:
       - qdrant_data:/qdrant/storage
-    environment:
-      QDRANT__SERVICE__HTTP_PORT: 6333
-      QDRANT__SERVICE__GRPC_PORT: 6334
-    networks:
-      - golett-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
-  # Redis for caching (optional but recommended)
-  # redis:
-  #   image: redis:7-alpine
-  #   container_name: golett-redis
-  #   ports:
-  #     - "6379:6379"
-  #   volumes:
-  #     - redis_data:/data
-  #   networks:
-  #     - golett-network
-  #   restart: unless-stopped
-  #   command: redis-server --appendonly yes
-  #   healthcheck:
-  #     test: ["CMD", "redis-cli", "ping"]
-  #     interval: 10s
-  #     timeout: 5s
-  #     retries: 5
-
-  # Golett Gateway Application (development)
-  # golett-app:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile
-  #   container_name: golett-app
-  #   environment:
-  #     - POSTGRES_CONNECTION=postgresql://golett_user:golett_password@postgres:5432/golett_db
-  #     - QDRANT_URL=http://qdrant:6333
-  #     - REDIS_URL=redis://redis:6379
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - LLM_MODEL=${LLM_MODEL:-gpt-4o}
-  #     - USER_ID=${USER_ID:-demo_user}
-  #     - KNOWLEDGE_DIR=/app/knowledge
-  #   volumes:
-  #     - .:/app
-  #     - ./knowledge:/app/knowledge
-  #     - ./logs:/app/logs
-  #   ports:
-  #     - "8000:8000"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     qdrant:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #   networks:
-  #     - golett-network
-  #   restart: unless-stopped
-  #   command: python -m uvicorn golett.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-  # pgAdmin for PostgreSQL management (optional)
-  pgadmin:
-    image: dpage/pgadmin4:latest
-    container_name: golett-pgadmin
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@golett.local
-      PGADMIN_DEFAULT_PASSWORD: admin123
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
-    ports:
-      - "5050:80"
+  flyway:
+    image: flyway/flyway:10-alpine
+    command: -url=jdbc:postgresql://postgres/golett_db -user=golett -password=golettpass -connectRetries=60 migrate
     volumes:
-      - pgadmin_data:/var/lib/pgadmin
-    depends_on:
-      - postgres
-    networks:
-      - golett-network
-    restart: unless-stopped
-    profiles:
-      - admin
-
-  # Jupyter Notebook for development and experimentation (optional)
-  # jupyter:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.jupyter
-  #   container_name: golett-jupyter
-  #   environment:
-  #     - POSTGRES_CONNECTION=postgresql://golett_user:golett_password@postgres:5432/golett_db
-  #     - QDRANT_URL=http://qdrant:6333
-  #     - REDIS_URL=redis://redis:6379
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #   volumes:
-  #     - .:/app
-  #     - ./notebooks:/app/notebooks
-  #     - ./knowledge:/app/knowledge
-  #   ports:
-  #     - "8888:8888"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     qdrant:
-  #       condition: service_healthy
-  #   networks:
-  #     - golett-network
-  #   restart: unless-stopped
-  #   profiles:
-  #     - dev
-  #   command: jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token=''
-
-  # CubeJS Server for Farm Data Analytics
-  cubejs:
-    image: cubejs/cube:latest
-    container_name: golett-cubejs
-    environment:
-      CUBEJS_DB_TYPE: postgres
-      CUBEJS_DB_HOST: postgres
-      CUBEJS_DB_NAME: farm_data
-      CUBEJS_DB_USER: golett_user
-      CUBEJS_DB_PASS: golett_password
-      CUBEJS_DB_PORT: 5432
-      CUBEJS_WEB_SOCKETS: "true"
-      CUBEJS_DEV_MODE: "true"
-      # CUBEJS_API_SECRET: farm_data_secret_key_change_in_production
-      CUBEJS_EXTERNAL_DEFAULT: "true"
-      CUBEJS_SCHEDULED_REFRESH_DEFAULT: "true"
-    ports:
-      - "4000:4000"
-    volumes:
-      - ./cubejs:/cube/conf
-    networks:
-      - golett-network
+      - ./migrations:/flyway/sql
     depends_on:
       postgres:
         condition: service_healthy
-    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      flyway:
+        condition: service_completed_successfully
+    environment:
+      PYTHONUNBUFFERED: "1"
+      # Connection strings for DAOs – update if you change credentials/ports
+      POSTGRES_DSN: postgres://golett:golettpass@postgres:5432/golett_db
+      QDRANT_URL: http://qdrant:6333
+      # ➡️  Supply your OpenAI key via an .env file or CLI ("-e OPENAI_API_KEY=...")
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    volumes:
+      - .:/app:delegated
+    command: ["python", "sample_crew.py"]
 
 volumes:
-  postgres_data:
-    driver: local
-  qdrant_data:
-    driver: local
-  # redis_data:
-  #   driver: local
-  pgadmin_data:
-    driver: local
-
-networks:
-  golett-network:
-    driver: bridge 
+  pgdata:
+  qdrant_data: 
