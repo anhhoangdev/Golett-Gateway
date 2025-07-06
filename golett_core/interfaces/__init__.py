@@ -34,6 +34,13 @@ from .storage import (
     TaggerInterface,
 )
 
+# New vNext interfaces
+from .core import (
+    RouterInterface,
+    GraphRetrieverInterface,
+    SchedulerInterface,
+)
+
 __all__ = [
     # Core business interfaces
     "MemoryInterface",
@@ -54,4 +61,8 @@ __all__ = [
     "MemoryStoreInterface",
     "VectorStoreInterface",
     "TaggerInterface",
+    # New vNext interfaces
+    "RouterInterface",
+    "GraphRetrieverInterface",
+    "SchedulerInterface",
 ] 

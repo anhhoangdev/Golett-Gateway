@@ -11,6 +11,7 @@ from golett_core.tools.file_tool import FileTool
 from golett_core.data_access.memory_dao import MemoryDAO
 from golett_core.data_access.vector_dao import VectorDAO
 from golett_core.memory.factory import create_memory_core
+from golett_core.prompts import UNIVERSAL_SYSTEM_PROMPT
 
 def _format_context_for_crew(bundle: ContextBundle) -> str:
     """Formats a context bundle into a string for crew injection."""
@@ -47,7 +48,7 @@ class Orchestrator:
         planner = Agent(
             role="Lead Software Planner",
             goal="Plan the execution of a coding task, breaking it down into small, manageable steps.",
-            backstory="You are a meticulous planner, excellent at identifying requirements and creating a clear, step-by-step plan for developers to follow. You do not write code.",
+            backstory=f"{UNIVERSAL_SYSTEM_PROMPT}\n\nYou are a meticulous planner, excellent at identifying requirements and creating a clear, step-by-step plan for developers to follow. You do not write code.",
             allow_delegation=True,
             verbose=True,
         )
@@ -55,7 +56,7 @@ class Orchestrator:
         coder = Agent(
             role="Senior Software Engineer",
             goal="Execute a coding plan by writing and modifying files.",
-            backstory="You are a skilled engineer who can take a plan and implement it flawlessly using the available file I/O tools. You write clean, efficient code.",
+            backstory=f"{UNIVERSAL_SYSTEM_PROMPT}\n\nYou are a skilled engineer who can take a plan and implement it flawlessly using the available file I/O tools. You write clean, efficient code.",
             tools=[FileTool()],
             verbose=True,
         )

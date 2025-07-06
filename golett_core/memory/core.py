@@ -96,13 +96,18 @@ class GolettMemoryCore:
         self,
         storage: MemoryStorageInterface,
         processor: MemoryProcessor | None = None,
-        summarizer = None,  # SummarizerWorker
-        graph_worker = None,  # GraphWorker
+        summarizer=None,  # SummarizerWorker
+        graph_worker=None,  # GraphWorker
+        context_forge=None,  # Optional advanced retriever
+        *,
+        bus=None,  # EventBus, kept optional to avoid breaking callers
     ):
         self.storage = storage
         self.processor = processor or MemoryProcessor()
         self.summarizer = summarizer
         self.graph_worker = graph_worker
+        self.context_forge = context_forge  # may be None for legacy search
+        self.bus = bus
     
     async def save_message(self, message: ChatMessage) -> None:
         """Store a message with automatic tagging and summarization triggering."""
@@ -111,6 +116,21 @@ class GolettMemoryCore:
         
         # 2. Store it
         await self.storage.store_memory_item(item)
+        
+        # 2b. Publish MemoryWritten event so reactive workers fire immediately
+        if self.bus is not None:
+            try:
+                from golett_core.events import MemoryWritten
+
+                await self.bus.publish(
+                    MemoryWritten(
+                        session_id=message.session_id,
+                        memory_id=str(item.id),
+                        type=item.type.value,
+                    )
+                )
+            except Exception as exc:  # pragma: no cover – event bus optional
+                print(f"[MemoryCore] failed to publish MemoryWritten: {exc}")
         
         # 3a. Persist graph entities / relations (fire-and-forget)
         if self.graph_worker and (
@@ -130,10 +150,20 @@ class GolettMemoryCore:
     async def search(
         self, 
         session_id: UUID, 
-        query: str, 
+        query: str,
+        intent: str = "analytical",
         include_recent: bool = True
     ) -> ContextBundle:
         """Build complete context for agent response."""
+        # Fast path: if a modern ContextForge instance is available, delegate.
+        if self.context_forge is not None:
+            msg = ChatMessage(session_id=session_id, role=ChatRole.USER, content=query)
+            return await self.context_forge.build_bundle(msg, intent=intent)
+
+        # --------------------------------------------------------------
+        # Legacy simple retrieval fallback (no graph / re-ranker)
+        # --------------------------------------------------------------
+
         tasks = []
         
         # Get recent messages

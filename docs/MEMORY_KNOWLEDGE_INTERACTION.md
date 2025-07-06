@@ -20,6 +20,12 @@
 Despite different lifecycles, the two subsystems play complementary roles when
 building the **context window** for the LLM.
 
+> **July 2025 update:** All memory writes now publish a `MemoryWritten` event
+> on the internal `EventBus`.  Workers such as `SummariserWorker` and
+> `PromotionWorker` listen to that event (via `AdaptiveScheduler`) so
+> summarisation and promotion happen *immediately* after the data change—no
+> cron job required.
+
 ---
 
 ### 2. Data-flow at Runtime

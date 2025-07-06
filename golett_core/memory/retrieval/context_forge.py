@@ -15,6 +15,7 @@ from typing import List, Optional
 from golett_core.memory.rings.multi_ring import MultiRingStorage
 from golett_core.memory.retrieval.reranker import ReRanker
 from golett_core.memory.retrieval.token_budget import TokenBudgeter
+from golett_core.memory.retrieval.graph_retriever import GraphMemoryRetriever
 from golett_core.schemas.memory import ChatMessage, ContextBundle, MemoryItem, Node
 from golett_core.utils.embeddings import get_embedding_model
 
@@ -27,11 +28,13 @@ class ContextForge:
         storage: MultiRingStorage,
         reranker: ReRanker | None = None,
         budgeter: TokenBudgeter | None = None,
+        graph_retriever: GraphMemoryRetriever | None = None,
     ) -> None:
         self.storage = storage
         self.reranker = reranker or ReRanker()
         self.budgeter = budgeter or TokenBudgeter()
         self._embedder = get_embedding_model()
+        self.graph_retriever = graph_retriever
 
     # ------------------------------------------------------------------
     # Public API
@@ -61,10 +64,15 @@ class ContextForge:
 
         candidate_items: List[MemoryItem] = list(chain(recent_items, sem_items))
 
-        # ------------------ Stage-2: re-ranking ------------------
-        self.reranker.update_weights(intent)
-        # No relational graph implemented yet → empty list
+        # ------------------ Stage-2: graph neighbourhood (optional) -------------
         relational_nodes: List[Node] = []
+        if self.graph_retriever is not None and intent == "relational":
+            relational_nodes = await self.graph_retriever.fetch_related_nodes(
+                message.content, depth=1
+            )
+
+        # ------------------ Stage-3: re-ranking ------------------
+        self.reranker.update_weights(intent)
 
         scored = [
             (
@@ -75,10 +83,10 @@ class ContextForge:
         ]
         scored.sort(key=lambda t: t[0], reverse=True)
 
-        # ------------------ Stage-3: token budget prune ------------------
+        # ------------------ Stage-4: token budget prune ------------------
         pruned_items = self.budgeter.prune([itm for _, itm in scored], 3000)
 
-        # ------------------ Stage-4: bundle assemble ------------------
+        # ------------------ Stage-5: bundle assemble ------------------
         return ContextBundle(
             session_id=session_id,
             current_turn=message,

@@ -13,10 +13,12 @@ from typing import List
 
 from crewai import Agent, Task
 
-from golett_core.interfaces import MemoryInterface
+from golett_core.interfaces import MemoryInterface, RouterInterface
 from golett_core.crew.golett_crew import GolettCrew
 from golett_core.schemas.memory import ChatMessage, ChatRole
 from golett_core.interfaces import KnowledgeInterface
+from golett_core.prompts import UNIVERSAL_SYSTEM_PROMPT
+from golett_core.routing.intent_router import IntentRouter
 
 __all__ = [
     "RAGOrchestrator",
@@ -30,11 +32,13 @@ class RAGOrchestrator:
         self,
         memory_core: MemoryInterface,
         knowledge_handler: KnowledgeInterface,
+        router: RouterInterface | None = None,
         session_id: UUID | None = None,
     ) -> None:  # noqa: D401
         self.session_id = session_id or uuid4()
         self.memory_core = memory_core
         self.knowledge = knowledge_handler
+        self.router = router or IntentRouter()
         self._setup_crew()
 
     # ------------------------------------------------------------------
@@ -42,10 +46,14 @@ class RAGOrchestrator:
     # ------------------------------------------------------------------
 
     def _setup_crew(self) -> None:  # noqa: D401
+        # Inject the universal Golett system prompt at the very beginning of
+        # every agent's instructions so all LLM workers share the same mental
+        # model and cooperate effectively (see docs/NEXT_STEPS.md).
+
         researcher = Agent(
             role="Researcher",
             goal="Search the knowledge base and extract the most relevant facts to answer the user's query.",
-            backstory="You excel at focused information retrieval and note-taking.",
+            backstory=f"{UNIVERSAL_SYSTEM_PROMPT}\n\nYou excel at focused information retrieval and note-taking.",
             allow_delegation=False,
             verbose=True,
         )
@@ -53,7 +61,7 @@ class RAGOrchestrator:
         writer = Agent(
             role="Technical Writer",
             goal="Craft a clear, concise and accurate answer based on the provided research notes.",
-            backstory="You transform raw research notes into user-friendly explanations, citing facts when appropriate.",
+            backstory=f"{UNIVERSAL_SYSTEM_PROMPT}\n\nYou transform raw research notes into user-friendly explanations, citing facts when appropriate.",
             verbose=True,
         )
 
@@ -72,8 +80,16 @@ class RAGOrchestrator:
         # ----- Persist user message in memory --------------------------------
         await self.crew.save_user_message(message)
 
-        # Retrieve memory context (short-term & long-term) ---------------------------------
-        mem_bundle = await self.memory_core.search(self.session_id, message, include_recent=True)
+        # Classify intent to drive retrieval strategy
+        intent = self.router.classify(message)
+
+        # Retrieve memory context with intent awareness ---------------------------------
+        mem_bundle = await self.memory_core.search(
+            self.session_id,
+            message,
+            intent=intent,
+            include_recent=True,
+        )
         mem_snippets = [itm.content for itm in mem_bundle.retrieved_memories][:5]
 
         # Retrieve knowledge snippets ------------------------------------------------------

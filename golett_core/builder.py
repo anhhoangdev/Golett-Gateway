@@ -37,7 +37,11 @@ from golett_core.schemas import Session, ChatMessage, Document
 from golett_core.cache import InMemoryCache
 from golett_core.session.manager import InMemorySessionManager
 from golett_core.data_access.graph_dao import GraphDAO
-
+from golett_core.routing.intent_router import IntentRouter
+from golett_core.scheduler import SchedulerService, AdaptiveScheduler
+from golett_core.memory.workers.promotion_worker import PromotionWorker
+from golett_core.memory.workers.ttl_pruner import TTLPruner
+from golett_core.events import EventBus, PeriodicTick, AgentProduced, NewTurn
 
 class GolettApp:
     """
@@ -47,9 +51,11 @@ class GolettApp:
         self,
         orchestrator: OrchestratorInterface,
         session_manager: SessionManagerInterface,
+        bus: EventBus,
     ):
         self.orchestrator = orchestrator
         self.session_manager = session_manager
+        self.bus = bus
 
     async def chat(self, session_id, user_input) -> str:
         # The orchestrator is no longer session-aware, so the app layer
@@ -57,8 +63,33 @@ class GolettApp:
         user_message = ChatMessage(session_id=session_id, role="user", content=user_input)
         await self.session_manager.add_message(session_id, user_message)
         
-        # The orchestrator now just runs the workflow for a single turn
+        # Emit NewTurn so workers & retrieval refreshers react
+        try:
+
+            await self.bus.publish(
+                NewTurn(
+                    session_id=session_id,
+                    user_id=str(user_message.id),  # using message id as proxy
+                    turn_id=str(user_message.id),
+                    text=user_input,
+                )
+            )
+        except Exception:
+            pass
+        
         assistant_response = await self.orchestrator.run(user_input)
+        
+        try:
+            await self.bus.publish(
+                AgentProduced(
+                    session_id=session_id,
+                    agent_id="assistant",
+                    turn_id=str(user_message.id),
+                    content=assistant_response,
+                )
+            )
+        except Exception:
+            pass
         
         # The RAG orchestrator's run() method now saves the assistant reply
         return assistant_response
@@ -89,6 +120,9 @@ class GolettBuilder:
         self.memory_core: Optional[MemoryStoreInterface] = None
         self.session_manager_core: Optional[SessionManagerInterface] = None
         self.orchestrator_core: Optional[OrchestratorInterface] = None
+
+        # New event bus for reactive core
+        self._bus = EventBus()
 
     def with_memory(self, memory_core: MemoryStoreInterface) -> GolettBuilder:
         """Override the unified memory component (must satisfy MemoryInterface)."""
@@ -151,6 +185,9 @@ class GolettBuilder:
                 graph_dao=graph_dao,
             )
 
+            # Inject event bus so save_message publishes MemoryWritten
+            self.memory_core.bus = self._bus  # type: ignore[attr-defined]
+
         # ------------------------------------------------------------------
         # 2. Session manager (chat history metadata)
         # ------------------------------------------------------------------
@@ -166,9 +203,48 @@ class GolettBuilder:
             self.orchestrator_core = RAGOrchestrator(
                 memory_core=self.memory_core,
                 knowledge_handler=self.knowledge_core,
+                router=IntentRouter(),
             )
 
+        # ------------------------------------------------------------------
+        # 3. Fire up NEW event-driven AdaptiveScheduler ----------------------
+        # ------------------------------------------------------------------
+
+        try:
+            ttl_pruner = TTLPruner(
+                self.memory_core.in_session_store,  # type: ignore[attr-defined]
+                self.memory_core.short_term_store,  # type: ignore[attr-defined]
+                memory_dao,
+            )
+
+            promotion_worker = PromotionWorker(
+                self.memory_core.short_term_store,  # type: ignore[attr-defined]
+                self.memory_core.long_term_store,  # type: ignore[attr-defined]
+                memory_dao,
+            )
+
+            adaptive = AdaptiveScheduler(
+                bus=self._bus,
+                workers=[ttl_pruner, promotion_worker],
+            )
+
+            import asyncio
+
+            # Periodic ticker – fallback safety every 10 minutes
+            async def _ticker(bus: EventBus, interval: int = 600):
+                while True:
+                    await asyncio.sleep(interval)
+                    await bus.publish(PeriodicTick(name="fallback"))
+
+            asyncio.create_task(adaptive.start())
+            asyncio.create_task(_ticker(self._bus))
+
+        except Exception as exc:  # pragma: no cover
+            print(f"[GolettBuilder] AdaptiveScheduler bootstrap failed: {exc}")
+
+        # ------------------------------------------------------------------
         return GolettApp(
             orchestrator=self.orchestrator_core,
             session_manager=self.session_manager_core,
+            bus=self._bus,
         ) 

@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Type, run
 from uuid import UUID
 
 from golett_core.schemas.knowledge import Document
+from golett_core.schemas.memory import ContextBundle
+from golett_core.schemas.memory import Node  # noqa: F401 – re-export for convenience
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -118,4 +120,42 @@ class KnowledgeInterface(Protocol):
         top_k: int = 5,
     ) -> List[str]:
         """Retrieves relevant context from the knowledge base for a query."""
+        ...
+
+
+# ---------------------------------------------------------------------------#
+# New interfaces introduced in vNext                                          #
+# ---------------------------------------------------------------------------#
+
+IntentLiteral = str  # Placeholder; concrete modules may use typing.Literal
+
+
+@runtime_checkable
+class RouterInterface(Protocol):
+    """Classifies user queries so the orchestrator can pick an agent chain."""
+
+    def classify(self, query: str) -> IntentLiteral:  # noqa: D401
+        """Return the intent label for *query* (e.g., "relational" vs "default")."""
+        ...
+
+
+@runtime_checkable
+class GraphRetrieverInterface(Protocol):
+    """Fetches graph neighbourhood nodes for a natural-language query."""
+
+    async def fetch_related_nodes(self, query: str, depth: int = 1) -> List[Node]:
+        """Return nodes within *depth* hops of entities in *query*."""
+        ...
+
+
+@runtime_checkable
+class SchedulerInterface(Protocol):
+    """Minimal cooperative task scheduler."""
+
+    def register_worker(self, worker_fn, *, interval: int | None = None) -> None:
+        """Register *worker_fn* for periodic execution."""
+        ...
+
+    async def start(self) -> None:
+        """Launch all registered workers and supervise them."""
         ...

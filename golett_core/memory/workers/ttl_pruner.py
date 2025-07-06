@@ -15,6 +15,8 @@ from golett_core.memory.rings.in_session import InSessionStore
 from golett_core.memory.rings.short_term import ShortTermStore
 from golett_core.data_access.memory_dao import MemoryDAO
 from golett_core.schemas.memory import MemoryItem, MemoryType
+from golett_core.events import MemoryWritten, PeriodicTick  # local import
+
 
 __all__ = ["TTLPruner"]
 
@@ -63,4 +65,20 @@ class TTLPruner:
                     print(f"[TTLPruner] removed {count} expired memory items")
             except Exception as exc:
                 print(f"[TTLPruner] error: {exc}")
-            await asyncio.sleep(interval_seconds) 
+            await asyncio.sleep(interval_seconds)
+
+    # ------------------------------------------------------------------
+    # Event-driven wrapper – satisfies WorkerInterface
+    # ------------------------------------------------------------------
+
+    # These extra methods allow TTLPruner to plug into the new
+    # AdaptiveScheduler without modifying external imports.
+
+    def interested_in(self, event):  # noqa: D401, ANN001
+        # React both to PeriodicTick or MemoryWritten (cache invalidation).
+        return isinstance(event, (MemoryWritten, PeriodicTick))
+
+    async def run(self, _event, bus):  # noqa: D401, ANN001, ARG002
+        removed = await self.prune_once()
+        if removed:
+            print(f"[TTLPruner] removed {removed} expired items (event-driven)") 

@@ -73,13 +73,27 @@ class PromotionWorker:
             promoted += 1
         return promoted
 
-    async def run_forever(self, interval_seconds: int = 300) -> None:  # noqa: D401
+    async def run_forever(self, interval_seconds: int = 900):  # noqa: D401
         """Run promotion loop until cancelled."""
         while True:
             try:
-                count = await self.promote_once()
-                if count:
-                    print(f"[PromotionWorker] promoted {count} items to long-term store")
+                promoted = await self.promote_once()
+                if promoted:
+                    print(f"[PromotionWorker] promoted {promoted} items to long-term store")
             except Exception as exc:  # pragma: no cover
                 print(f"[PromotionWorker] error: {exc}")
             await asyncio.sleep(interval_seconds) 
+
+    # ------------------------------------------------------------------
+    # WorkerInterface compatibility
+    # ------------------------------------------------------------------
+
+    def interested_in(self, event):  # noqa: D401, ANN001
+        from golett_core.events import MemoryWritten, PeriodicTick  # local import
+        # React when new memory items appear or via periodic tick.
+        return isinstance(event, (MemoryWritten, PeriodicTick))
+
+    async def run(self, _event, bus):  # noqa: D401, ANN001, ARG002
+        promoted = await self.promote_once()
+        if promoted:
+            print(f"[PromotionWorker] promoted {promoted} items (event-driven)") 

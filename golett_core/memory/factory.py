@@ -20,6 +20,8 @@ from golett_core.memory.rings.long_term import LongTermStore
 from golett_core.memory.rings.multi_ring import MultiRingStorage
 from golett_core.storage.temp.in_memory_stores import InMemoryGraphStore
 from golett_core.data_access.graph_dao import GraphDAO
+from golett_core.memory.retrieval.graph_retriever import GraphMemoryRetriever
+from golett_core.memory.retrieval.context_forge import ContextForge
 
 def create_memory_core(
     memory_dao: MemoryDAO,
@@ -70,10 +72,24 @@ def create_memory_core(
     
     graph_worker = GraphWorker(graph_dao)
     
+    # Graph neighbourhood retriever for relational queries
+    graph_retriever = GraphMemoryRetriever(graph_dao)
+
+    # Advanced context builder that can leverage semantic, recency & graph signals
+    context_forge = ContextForge(storage, graph_retriever=graph_retriever)
+    
     # Assemble the core
-    return GolettMemoryCore(
+    core = GolettMemoryCore(
         storage=storage,
         processor=processor, 
         summarizer=summarizer,
         graph_worker=graph_worker,
-    ) 
+        context_forge=context_forge,
+    )
+
+    # Expose ring stores for scheduler integration
+    core.in_session_store = in_session  # type: ignore[attr-defined]
+    core.short_term_store = short_term  # type: ignore[attr-defined]
+    core.long_term_store = long_term  # type: ignore[attr-defined]
+
+    return core 

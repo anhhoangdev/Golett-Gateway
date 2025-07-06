@@ -123,6 +123,35 @@ metadata and chat history.  When you do not need durability, an
 
 ---
 
+#### 5. Event-Driven runtime additions (2025-07)
+
+```mermaid
+classDiagram
+    class EventBus
+    class AdaptiveScheduler
+    class WorkerInterface
+    class TTLPruner
+    class PromotionWorker
+
+    GolettApp --> EventBus : publishes
+    GolettMemoryCore --> EventBus : publishes
+
+    AdaptiveScheduler --> EventBus : listens
+    AdaptiveScheduler --> WorkerInterface : dispatches
+
+    WorkerInterface <|.. TTLPruner
+    WorkerInterface <|.. PromotionWorker
+```
+
+**Explanation**  
+The new `EventBus` is a lightweight pub/sub hub.  `GolettApp.chat()` and
+`GolettMemoryCore.save_message()` push `NewTurn`, `AgentProduced`, and
+`MemoryWritten` events onto the bus.  `AdaptiveScheduler` reads each event and
+fires any `WorkerInterface` implementations whose `interested_in()` predicate
+matches.  This replaces the earlier cron-style `SchedulerService`.
+
+---
+
 ### Reading the diagrams
 
 * **Solid arrows (→)** &nbsp;represent composition – the source class keeps a
