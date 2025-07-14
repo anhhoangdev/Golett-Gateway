@@ -1,40 +1,35 @@
 # 🗿 Golett Gateway: Your BI Insights Portal
 
-**Golett Gateway: Unearthing Insights with Your Autonomous BI Agent Crew!**
+**Golett Gateway – "Chat-to-Card" Event-Driven BI Assistant**
 
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://example.com/build) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![crewAI](https://img.shields.io/badge/powered_by-crewAI-blue)](https://github.com/joaomdmoura/crewAI)
 
 Welcome, Data Trainer! **Golett Gateway** is your access point to a powerful system of **Agentic Business Intelligence (BI) Agents**. Built on the `crewAI` framework, this system allows you to pose business questions in plain language and receive insightful answers, all orchestrated by a dedicated crew of AI agents.
 
-Think of each 'Golett' in your crew as a specialized data assistant: one might be a **Query Golett** digging into databases, another a **Processor Golett** sifting through the findings, and a **Reporter Golett** presenting clear insights. The Gateway is where you issue your 'research quests' and receive their distilled wisdom.
+Ask a question in natural language → Golett's agent crew generates SQL, spins up a Metabase card, and streams the link right back. Every chat turn publishes events to an in-process **EventBus** so maintenance (TTL pruning, summary promotion) happens instantly—no cron jobs.
 
 ---
 
 ## ✨ Features
 
-* **Natural Language Querying:** Ask complex business questions in everyday language.
-* **Automated Data Retrieval:** Agents autonomously generate and execute queries (e.g., SQL, API calls) against your configured data sources.
-* **Intelligent Data Processing:** Agents can clean, transform, aggregate, and analyze retrieved data.
-* **Insight Generation & Summarization:** AI crews collaborate to synthesize findings into understandable reports, visualizations, or direct answers.
-* **`crewAI` Powered Collaboration:** Leverages `crewAI` for robust teamwork between specialized BI agents (e.g., Query Agent, Analysis Agent, Reporting Agent).
-* **Data Source Connectivity:** Designed to be adaptable to various data sources (databases, APIs, CSV files, etc.).
-* **Extensible Agent Skills:** Easily equip your Golett agents with new tools and capabilities for diverse BI tasks.
+* **Chat-to-Card:** Every chat session corresponds to a Metabase card; pin it to any dashboard with one click.
+* **Instant Context Refresh:** Memory writes emit `MemoryWritten` events; the retrieval window rebuilds on the fly (Cursor-style).
+* **AdaptiveScheduler (no cron):** EventBus wakes `TTLPruner`, `PromotionWorker`, etc., milliseconds after data changes.
+* **Hierarchical Memory Rings:** In-session (1 h TTL) → short-term summaries (7 days) → long-term knowledge (no TTL).
+* **crewAI Agent Collaboration:** SQLAgent → DataAgent → WriterAgent pipeline, fully customizable.
+* **Pure-Python Core:** Framework-agnostic; bring FastAPI, Flask, or a CLI.
 
 ---
 
 ## 🧱 System Overview
 
-Golett Gateway orchestrates a flow for answering your BI questions:
+High-level turn sequence:
 
-1.  **User Question:** The "Trainer" poses a business question through the Gateway.
-2.  **Agent Crew Activation:** A specialized `crewAI` team is activated.
-    * **Understanding Agent:** Interprets the natural language question.
-    * **Query Planning Agent:** Determines what data is needed and how to get it.
-    * **Data Retrieval Agent (Query Golett):** Connects to data sources and executes queries.
-    * **Data Processing Agent (Processor Golett):** Cleans, analyzes, and aggregates the data.
-    * **Insight Formulation Agent (Reporter Golett):** Synthesizes the information into a coherent answer.
-3.  **Data Interaction:** Agents interact with configured databases, APIs, or files.
-4.  **Answer Delivery:** The Gateway presents the processed information and insights back to the user.
+1. **User** asks a question via HTTP/WS.
+2. `GolettApp.chat()` saves the message and publishes `NewTurn`.
+3. **IntentRouter → Orchestrator** spins up `SQLAgent` which generates SQL and calls **MetabaseDAO.create_card()**.
+4. Card ID returned → `AgentProduced` event → response streamed back with the card URL.
+5. Background workers triggered by `MemoryWritten` keep memory tidy without delaying the user.
 
 ## Overview
 
@@ -46,27 +41,15 @@ Golett Gateway provides a system for managing persistent chat sessions with agen
 
 ## Architecture
 
-The system consists of several key components:
+### Architecture Snapshot (July 2025)
 
-### Memory Management
+* **EventBus** – pub/sub fabric inside the same process (swap for Redis to scale).  
+* **AdaptiveScheduler** – dispatches background workers on events.  
+* **GolettMemoryCore** – unified memory API (rings, summariser, graph).  
+* **SessionContext** – live retrieval window per chat.  
+* **Agents:** SQLAgent → WriterAgent (default); plug more via `GolettBuilder.with_crews()`.
 
-- **PostgreSQL Storage**: Structured data storage for efficient retrieval of conversation history and metadata
-- **Qdrant Storage**: Vector-based storage for semantic search and similarity retrieval
-- **Memory Manager**: Unified API for managing both storage backends
-
-### Chat Flow
-
-- **Chat Session**: Manages conversation state and interfaces with memory
-- **Chat Flow Manager**: Orchestrates the decision-making process between agents
-- **BI Query Analyzer**: Specialized component for analyzing business intelligence queries
-
-### Agents
-
-The system uses specialized agents for different aspects of the conversation:
-
-1. **Query Analyzer**: Determines if a query requires BI data
-2. **Response Strategist**: Decides on the optimal response format
-3. **Response Generator**: Creates the final response
+For diagrams see `docs/ARCHITECTURE_OVERVIEW.md` & `docs/RUNTIME_FLOW.md`.
 
 ## Getting Started
 

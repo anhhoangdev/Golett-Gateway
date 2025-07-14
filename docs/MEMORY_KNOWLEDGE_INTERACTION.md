@@ -136,7 +136,7 @@ following roadmap items will introduce deeper interplay:
    The `SummarizerWorker` will query Knowledge to anchor summaries with
    authoritative facts, reducing hallucination.
 3. **Unified Graph Layer**  
-   The planned `GraphStoreInterface` will allow both Memory and Knowledge items
+   The planned ``GraphStoreInterface` will allow both Memory and Knowledge items
    to appear as nodes/edges in a single knowledge graph for richer reasoning.
 
 ---
